@@ -1,0 +1,19 @@
+9/22 Repo Created
+
+Goals for this project: Deploy a working and reliable website that tracks
+habits, goals, and adds an interesting niche to it that makes progress tangible. 
+Some examples include the tree, from the website on ___ app and a pet that grows. Maybe create a small game where the characters have stats and the stats grow with your real life accomplishments?
+
+create user levels and certain permissions to the levels of users. 
+
+Goals to learn from this project: 
+
+Front-end: Learn typescript and React
+
+Back-end: Node.js with Express 
+
+Database: PostgreSQL
+
+DevOps and Tooling: Git and GitHub, Docker, learn pipeline best practices, and testing practices
+
+Hosting and Deployment: Google Cloud Platform
