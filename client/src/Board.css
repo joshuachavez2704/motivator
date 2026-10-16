@@ -1,0 +1,44 @@
+.board {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  margin: 1.5rem auto;
+  border-radius: 6px;
+  background: #fafafa;
+  box-shadow: 0 0 0 2px #888;
+}
+
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 90px;
+  padding: 8px;
+  max-width: 720px;
+  margin: 1rem auto 0;
+  border: 2px dashed #aaa;
+  border-radius: 6px;
+}
+
+.piece {
+  flex: none;
+  pointer-events: none; /* the box itself is not grabbable... */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.piece svg {
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.piece .piece-hit {
+  pointer-events: visiblePainted; /* ...only the piece's actual shape is */
+  cursor: grab;
+}
+
+.piece-ghost .piece-hit {
+  pointer-events: none;
+}

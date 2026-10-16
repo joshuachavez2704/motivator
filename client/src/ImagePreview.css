@@ -1,0 +1,35 @@
+.preview {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 90px;
+  padding: 4px;
+  border: 2px solid #888;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  background: #fff;
+  color: #333;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  z-index: 500; /* above the board, below the dragged piece (1000) */
+  transition: width 0.2s ease;
+}
+
+.preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.preview span {
+  display: block;
+  margin-top: 4px;
+}
+
+.preview-open {
+  width: min(90vw, 560px);
+}
