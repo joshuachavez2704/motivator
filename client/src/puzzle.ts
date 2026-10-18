@@ -12,7 +12,7 @@ export function piecesEarned(
 
 export const demoPuzzle: Puzzle = {
   id: 1,
-  imageUrl: 'https://picsum.photos/seed/habit/1200/800',
+  imageUrl: '',
   rows: 4,
   cols: 6,
   seed: 42,
@@ -101,4 +101,63 @@ export function snapToNeighbors(
   }
 
   return best
+}
+
+// Unsplash lets us ask for any size by adding parameters to the "raw" URL.
+// The picture must have the same shape as the board (cols : rows), otherwise
+// it would be stretched, so we ask for exactly that shape and let it crop.
+export function sizedPhotoUrl(rawUrl: string, puzzle: Puzzle, width = 1200): string {
+  const url = new URL(rawUrl)
+  url.searchParams.set('w', String(width))
+  url.searchParams.set('h', String(Math.round((width * puzzle.rows) / puzzle.cols)))
+  url.searchParams.set('fit', 'crop')
+  url.searchParams.set('q', '80')
+  return url.toString()
+}
+
+// How far (in piece widths) two neighbours may be from their perfect fit
+// and still count as locked together.
+export const LOCK_TOLERANCE = 0.05
+
+// Are `a` and `b` placed side by side exactly the way they sit in the picture?
+export function areLocked(a: Piece, b: Piece, puzzle: Puzzle): boolean {
+  if (a.position === null || b.position === null) return false
+
+  const dr = b.row - a.row
+  const dc = b.col - a.col
+  if (Math.abs(dr) + Math.abs(dc) !== 1) return false // must be direct neighbours
+
+  // where b would be if it fit a perfectly
+  const expectedX = a.position.x + dc / puzzle.cols
+  const expectedY = a.position.y + dr / puzzle.rows
+  const off = Math.hypot(
+    (b.position.x - expectedX) * puzzle.cols,
+    (b.position.y - expectedY) * puzzle.rows,
+  )
+  return off < LOCK_TOLERANCE
+}
+
+// Every piece connected to `startId` through a chain of locked neighbours
+// (including the piece itself).
+export function connectedGroup(
+  startId: number,
+  pieces: Piece[],
+  puzzle: Puzzle,
+): Piece[] {
+  const start = pieces.find((p) => p.id === startId)
+  if (!start) return []
+
+  const group = [start]
+  const seen = new Set([startId])
+
+  // `group` grows while we loop over it, so we also visit neighbours of neighbours
+  for (let i = 0; i < group.length; i++) {
+    for (const p of pieces) {
+      if (!seen.has(p.id) && areLocked(group[i], p, puzzle)) {
+        seen.add(p.id)
+        group.push(p)
+      }
+    }
+  }
+  return group
 }
