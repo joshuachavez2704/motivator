@@ -27,3 +27,16 @@ export type Piece = {
   // null means the piece is still in the tray.
   position: BoardPosition | null
 }
+
+// What our own API (/api/puzzle-image) sends back about an Unsplash photo
+export type PuzzlePhoto = {
+  id: string
+  imageUrl: string // Unsplash's "raw" URL: we add size parameters to it
+  width: number
+  height: number
+  alt: string
+  photographer: string
+  photographerUrl: string
+  photoUrl: string
+  downloadLocation: string
+}

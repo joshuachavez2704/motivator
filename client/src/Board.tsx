@@ -10,7 +10,7 @@ type Props = {
   shape: PuzzleShape
   pieces: Piece[]
   boardRef: RefObject<HTMLDivElement | null>
-  draggingId: number | null
+  draggingIds: number []
   onPiecePointerDown: (e: ReactPointerEvent<HTMLDivElement>, piece: Piece) => void
 }
 
@@ -19,7 +19,7 @@ function Board({
   shape,
   pieces,
   boardRef,
-  draggingId,
+  draggingIds,
   onPiecePointerDown,
 }: Props) {
   const { rows, cols } = puzzle
@@ -48,7 +48,7 @@ function Board({
               top: `${(y - TAB_MARGIN / rows) * 100}%`,
               width: `${((1 + 2 * TAB_MARGIN) / cols) * 100}%`,
               height: `${((1 + 2 * TAB_MARGIN) / rows) * 100}%`,
-              opacity: p.id === draggingId ? 0.3 : 1,
+              opacity: draggingIds.includes(p.id) ? 0.3 : 1,
             }}
           />
         )

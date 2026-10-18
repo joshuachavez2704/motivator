@@ -1,16 +1,28 @@
 import { useState, useRef, useMemo } from 'react'
 import type { SubmitEvent, PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
-import { piecesEarned, createPieces, overlaps, snapToNeighbors, demoPuzzle } from './puzzle'
+import {
+  piecesEarned,
+  createPieces,
+  overlaps,
+  sizedPhotoUrl,
+  snapToNeighbors,
+  connectedGroup,
+  demoPuzzle,
+} from './puzzle'
 import { generateShape, TAB_MARGIN } from './shapes'
-import type { Task, Piece, BoardPosition } from './types'
+import type { Task, Piece, BoardPosition, Puzzle } from './types'
 import Board from './Board'
 import PieceView from './PieceView'
 import ImagePreview from './ImagePreview'
+import { usePuzzlePhoto } from './usePuzzlePhoto'
 
+// one piece being carried, positioned relative to the piece you grabbed (in pixels)
+type DragMember = { id: number; dx: number; dy: number }
 
 type DragState = {
-  id: number
+  id: number // the piece under your pointer
+  members: DragMember[] // everything being carried (just that piece, unless shift was held)
   x: number // current pointer position (pixels)
   y: number
   gx: number // where inside the piece's box it was grabbed (0 to 1)
@@ -43,6 +55,13 @@ function App() {
 
   // the shapes only depend on the puzzle, so build them once
   const shape = useMemo(() => generateShape(demoPuzzle), [])
+
+  // the photo from Unsplash (via our API); until it arrives the pieces are plain colours
+  const { photo, loading, error, fetchNew } = usePuzzlePhoto()
+  const puzzle: Puzzle = {
+    ...demoPuzzle,
+    imageUrl: photo ? sizedPhotoUrl(photo.imageUrl, demoPuzzle) : '',
+  }
 
   const completedWeight = tasks
     .filter((task) => task.done)
@@ -93,7 +112,79 @@ function App() {
     })
   }
 
-  function dropPiece(id: number, x: number, y: number, gx: number, gy: number) {
+  // like movePiece, but for several locked pieces that travel together
+  function moveGroup(ids: number[], grabbedId: number, target: BoardPosition) {
+    setAllPieces((prev) => {
+      const { rows, cols } = demoPuzzle
+      const members = prev.filter(
+        (p): p is Piece & { position: BoardPosition } =>
+          ids.includes(p.id) && p.position !== null,
+      )
+      const grabbed = members.find((p) => p.id === grabbedId)
+      if (!grabbed) return prev
+
+      // how far the whole group moves = how far the grabbed piece moved
+      let dx = target.x - grabbed.position.x
+      let dy = target.y - grabbed.position.y
+
+      // keep every member on the board
+      const xs = members.map((p) => p.position.x)
+      const ys = members.map((p) => p.position.y)
+      const fits = (mx: number, my: number) =>
+        Math.min(...xs) + mx >= -1e-9 &&
+        Math.max(...xs) + mx <= 1 - 1 / cols + 1e-9 &&
+        Math.min(...ys) + my >= -1e-9 &&
+        Math.max(...ys) + my <= 1 - 1 / rows + 1e-9
+
+      dx = clamp(dx, -Math.min(...xs), 1 - 1 / cols - Math.max(...xs))
+      dy = clamp(dy, -Math.min(...ys), 1 - 1 / rows - Math.max(...ys))
+
+      // snap the group onto pieces outside it: use the smallest correction any member wants
+      const others = prev.filter((p) => !ids.includes(p.id))
+      let fix = { x: 0, y: 0, size: Infinity }
+      for (const m of members) {
+        const wanted = { x: m.position.x + dx, y: m.position.y + dy }
+        const snapped = snapToNeighbors(m, wanted, others, demoPuzzle)
+        const cx = snapped.x - wanted.x
+        const cy = snapped.y - wanted.y
+        const size = Math.hypot(cx * cols, cy * rows)
+        if (size > 1e-9 && size < fix.size) fix = { x: cx, y: cy, size }
+      }
+      if (fix.size < Infinity && fits(dx + fix.x, dy + fix.y)) {
+        dx += fix.x
+        dy += fix.y
+      }
+
+      // no member may overlap a piece that isn't part of the group
+      const blocked = members.some((m) =>
+        others.some(
+          (o) =>
+            o.position !== null &&
+            overlaps(
+              o.position,
+              { x: m.position.x + dx, y: m.position.y + dy },
+              demoPuzzle,
+            ),
+        ),
+      )
+      if (blocked) return prev
+
+      return prev.map((p) =>
+        ids.includes(p.id) && p.position
+          ? { ...p, position: { x: p.position.x + dx, y: p.position.y + dy } }
+          : p,
+      )
+    })
+  }
+
+  function dropPiece(
+    id: number,
+    ids: number[],
+    x: number,
+    y: number,
+    gx: number,
+    gy: number,
+  ) {
     const board = boardRef.current?.getBoundingClientRect()
     const tray = trayRef.current?.getBoundingClientRect()
 
@@ -104,14 +195,18 @@ function App() {
       // top-left of the piece's box, then step in by the tab margin to reach its base square
       const px = (x - board.left) / board.width - gx * boxW + TAB_MARGIN / cols
       const py = (y - board.top) / board.height - gy * boxH + TAB_MARGIN / rows
-      movePiece(id, {
-        x: clamp(px, 0, 1 - 1 / cols),
-        y: clamp(py, 0, 1 - 1 / rows),
-      })
-    } else if (tray && isInside(tray, x, y)) {
-      movePiece(id, null)
+      if (ids.length > 1) {
+        moveGroup(ids, id, { x: px, y: py })
+      } else {
+        movePiece(id, {
+          x: clamp(px, 0, 1 - 1 / cols),
+          y: clamp(py, 0, 1 - 1 / rows),
+        })
+      }
+    } else if (tray && isInside(tray, x, y) && ids.length === 1) {
+      movePiece(id, null) // groups can't go back to the tray
     }
-    // dropped somewhere else: the piece stays where it was
+    // dropped somewhere else: everything stays where it was
   }
 
   function startDrag(e: ReactPointerEvent<HTMLDivElement>, piece: Piece) {
@@ -121,18 +216,30 @@ function App() {
     const gy = (e.clientY - rect.top) / rect.height
     const { width, height } = rect
 
-    setDrag({ id: piece.id, x: e.clientX, y: e.clientY, gx, gy, width, height })
+    // normally we carry just this piece; with shift held, everything locked to it comes too
+    let members: DragMember[] = [{ id: piece.id, dx: 0, dy: 0 }]
+    const board = boardRef.current?.getBoundingClientRect()
+    const start = piece.position
+    if (e.shiftKey && start && board) {
+      members = connectedGroup(piece.id, allPieces, demoPuzzle).flatMap((m) =>
+        m.position
+          ? [
+              {
+                id: m.id,
+                dx: (m.position.x - start.x) * board.width,
+                dy: (m.position.y - start.y) * board.height,
+              },
+            ]
+          : [],
+      )
+    }
+    const ids = members.map((m) => m.id)
+
+    const base = { id: piece.id, members, gx, gy, width, height }
+    setDrag({ ...base, x: e.clientX, y: e.clientY })
 
     function onMove(ev: PointerEvent) {
-      setDrag({
-        id: piece.id,
-        x: ev.clientX,
-        y: ev.clientY,
-        gx,
-        gy,
-        width,
-        height,
-      })
+      setDrag({ ...base, x: ev.clientX, y: ev.clientY })
     }
     function stop() {
       window.removeEventListener('pointermove', onMove)
@@ -141,7 +248,7 @@ function App() {
       setDrag(null)
     }
     function onUp(ev: PointerEvent) {
-      dropPiece(piece.id, ev.clientX, ev.clientY, gx, gy)
+      dropPiece(piece.id, ids, ev.clientX, ev.clientY, gx, gy)
       stop()
     }
 
@@ -149,8 +256,6 @@ function App() {
     window.addEventListener('pointerup', onUp)
     window.addEventListener('pointercancel', stop)
   }
-
-  const draggedPiece = drag ? allPieces.find((p) => p.id === drag.id) : undefined
 
   return (
     <main>
@@ -225,7 +330,7 @@ function App() {
             <PieceView
               key={p.id}
               piece={p}
-              puzzle={demoPuzzle}
+              puzzle={puzzle}
               shape={shape}
               onPointerDown={startDrag}
               style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
@@ -233,33 +338,67 @@ function App() {
           ))}
       </div>
 
-      <ImagePreview imageUrl={demoPuzzle.imageUrl} />
+      <ImagePreview imageUrl={puzzle.imageUrl} />
+
+      <div>
+        <button type="button" onClick={fetchNew} disabled={loading}>
+          {loading ? 'Loading photo…' : 'New photo'}
+        </button>
+        {error && <span role="alert"> Could not load a photo: {error}</span>}
+      </div>
 
       <Board
-        puzzle={demoPuzzle}
+        puzzle={puzzle}
         shape={shape}
         pieces={allPieces}
         boardRef={boardRef}
-        draggingId={drag?.id ?? null}
+        draggingIds={drag ? drag.members.map((m) => m.id) : []}
         onPiecePointerDown={startDrag}
       />
 
-      {drag && draggedPiece && (
-        <PieceView
-          ghost
-          piece={draggedPiece}
-          puzzle={demoPuzzle}
-          shape={shape}
-          style={{
-            position: 'fixed',
-            left: drag.x - drag.gx * drag.width,
-            top: drag.y - drag.gy * drag.height,
-            width: drag.width,
-            height: drag.height,
-            pointerEvents: 'none',
-            zIndex: 1000,
-          }}
-        />
+      {drag &&
+        drag.members.map((m) => {
+          const piece = allPieces.find((p) => p.id === m.id)
+          if (!piece) return null
+          return (
+            <PieceView
+              ghost
+              key={m.id}
+              piece={piece}
+              puzzle={puzzle}
+              shape={shape}
+              style={{
+                position: 'fixed',
+                left: drag.x - drag.gx * drag.width + m.dx,
+                top: drag.y - drag.gy * drag.height + m.dy,
+                width: drag.width,
+                height: drag.height,
+                pointerEvents: 'none',
+                zIndex: 1000,
+              }}
+            />
+          )
+        })}
+
+      {photo && (
+        <p className="credit">
+          Photo by{' '}
+          <a
+            href={`${photo.photographerUrl}?utm_source=habit_puzzle&utm_medium=referral`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {photo.photographer}
+          </a>{' '}
+          on{' '}
+          <a
+            href="https://unsplash.com/?utm_source=habit_puzzle&utm_medium=referral"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Unsplash
+          </a>
+        </p>
       )}
     </main>
   )
