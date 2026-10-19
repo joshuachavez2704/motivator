@@ -161,3 +161,10 @@ export function connectedGroup(
   }
   return group
 }
+
+// Pieces are earned in a fixed order (for now the piece id: top-left to
+// bottom-right). If the player has earned 5 pieces, the first 5 are theirs
+// and the rest are still locked.
+export function isEarned(piece: Piece, earned: number): boolean {
+  return piece.id < earned
+}

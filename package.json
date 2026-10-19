@@ -1,0 +1,24 @@
+{
+  "name": "motivator",
+  "version": "1.0.0",
+  "description": "9/22 Repo Created",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "concurrently -k -n api,web \"npm run dev --prefix server\" \"npm run dev --prefix client\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joshuachavez2704/motivator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joshuachavez2704/motivator/issues"
+  },
+  "homepage": "https://github.com/joshuachavez2704/motivator#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

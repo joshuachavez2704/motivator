@@ -9,6 +9,7 @@ import {
   snapToNeighbors,
   connectedGroup,
   demoPuzzle,
+  isEarned,
 } from './puzzle'
 import { generateShape, TAB_MARGIN } from './shapes'
 import type { Task, Piece, BoardPosition, Puzzle } from './types'
@@ -68,6 +69,11 @@ function App() {
     .reduce((sum, task) => sum + task.weight, 0)
 
   const pieces = piecesEarned(completedWeight, piecesPerPoint, dailyCap)
+
+  // the tray only holds pieces that are earned and not on the board yet
+  const trayPieces = allPieces.filter(
+    (p) => p.position === null && isEarned(p, pieces),
+  )
 
   function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -224,12 +230,12 @@ function App() {
       members = connectedGroup(piece.id, allPieces, demoPuzzle).flatMap((m) =>
         m.position
           ? [
-              {
-                id: m.id,
-                dx: (m.position.x - start.x) * board.width,
-                dy: (m.position.y - start.y) * board.height,
-              },
-            ]
+            {
+              id: m.id,
+              dx: (m.position.x - start.x) * board.width,
+              dy: (m.position.y - start.y) * board.height,
+            },
+          ]
           : [],
       )
     }
@@ -324,18 +330,19 @@ function App() {
       </div>
 
       <div className="tray" ref={trayRef}>
-        {allPieces
-          .filter((p) => p.position === null)
-          .map((p) => (
-            <PieceView
-              key={p.id}
-              piece={p}
-              puzzle={puzzle}
-              shape={shape}
-              onPointerDown={startDrag}
-              style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
-            />
-          ))}
+        {trayPieces.length === 0 && (
+          <span className="tray-empty">Complete tasks to earn puzzle pieces</span>
+        )}
+        {trayPieces.map((p) => (
+          <PieceView
+            key={p.id}
+            piece={p}
+            puzzle={puzzle}
+            shape={shape}
+            onPointerDown={startDrag}
+            style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
+          />
+        ))}
       </div>
 
       <ImagePreview imageUrl={puzzle.imageUrl} />
