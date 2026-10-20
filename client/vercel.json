@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/:match*", "destination": "https://lifepieces-api.onrender.com/api/:match*" }
+  ]
+}
