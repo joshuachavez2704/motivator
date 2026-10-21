@@ -25,6 +25,7 @@ async function requestPhoto(): Promise<PuzzlePhoto> {
   } catch {
     // storage can be blocked; the photo still works for this visit
   }
+  void fetch(`/api/photos/${data.id}/download`, { method: 'POST' }).catch(() => {})
   return data
 }
 
