@@ -80,3 +80,22 @@ app.listen(PORT, (err?: Error) => {
   }
   console.log(`API listening on http://localhost:${PORT}`)
 })
+
+
+app.post('/api/photos/:id/download', async (req, res) => {
+  const { id } = req.params
+  // only letters, digits, - and _ : never build a URL from unchecked input
+  if (!/^[\w-]+$/.test(id)) {
+    res.status(400).json({ error: 'Bad photo id' })
+    return
+  }
+  try {
+    const r = await fetch(`https://api.unsplash.com/photos/${id}/download`, {
+      headers: { Authorization: `Client-ID ${accessKey}` },
+      signal: AbortSignal.timeout(8000),
+    })
+    res.status(r.ok ? 204 : 502).end()
+  } catch {
+    res.status(502).end()
+  }
+})
