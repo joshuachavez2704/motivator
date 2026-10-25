@@ -1,5 +1,6 @@
 import express from 'express'
 import dns from 'node:dns'
+import { pool } from './db.js'
 
 dns.setDefaultResultOrder('ipv4first')  
 
@@ -97,5 +98,16 @@ app.post('/api/photos/:id/download', async (req, res) => {
     res.status(r.ok ? 204 : 502).end()
   } catch {
     res.status(502).end()
+  }
+})
+
+
+app.get('/api/health/db', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1')
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('Database check failed:', err)
+    res.status(503).json({ ok: false, error: 'Database not reachable' })
   }
 })
