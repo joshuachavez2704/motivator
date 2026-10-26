@@ -6,6 +6,8 @@ dns.setDefaultResultOrder('ipv4first')
 
 const app = express()
 
+app.use(express.json())
+
 app.use((req, _res, next) => {
   console.log(new Date().toISOString(), req.method, req.url)
   next()
@@ -109,5 +111,17 @@ app.get('/api/health/db', async (_req, res) => {
   } catch (err) {
     console.error('Database check failed:', err)
     res.status(503).json({ ok: false, error: 'Database not reachable' })
+  }
+})
+
+app.post('/api/players', async (_req, res) => {
+  try {
+    const { rows } = await pool.query<{ id: string }>(
+      'INSERT INTO players DEFAULT VALUES RETURNING id',
+    )
+    res.status(201).json({ id: rows[0].id })
+  } catch (err) {
+    console.error('Could not create player:', err)
+    res.status(503).json({ error: 'Database not reachable' })
   }
 })
