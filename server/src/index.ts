@@ -77,13 +77,7 @@ app.get('/api/puzzle-image', async (req, res) => {
   }
 })
 
-app.listen(PORT, (err?: Error) => {
-  if (err) {
-    console.error('Could not start the server:', err.message)
-    process.exit(1)
-  }
-  console.log(`API listening on http://localhost:${PORT}`)
-})
+
 
 
 app.post('/api/photos/:id/download', async (req, res) => {
@@ -185,3 +179,57 @@ async function requirePlayer(req: Request, res: Response, next: NextFunction) {
 function isIntInRange(value: unknown, min: number, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 }
+
+app.get('/api/puzzle', requirePlayer, async (_req, res) => {
+  try {
+    const { rows } = await pool.query<{
+      id: string
+      rows: number
+      cols: number
+      seed: number
+      photo: unknown
+      created_at: Date
+    }>(
+      `SELECT id, rows, cols, seed, photo, created_at
+       FROM puzzles
+       WHERE player_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [res.locals.playerId],
+    )
+    const puzzle = rows[0]
+    if (!puzzle) {
+      // a brand-new player has no puzzle yet: that is normal, not an error
+      res.json({ puzzle: null, positions: [] })
+      return
+    }
+
+    const placed = await pool.query<{ piece_id: number; x: number; y: number }>(
+      'SELECT piece_id, x, y FROM piece_positions WHERE puzzle_id = $1 ORDER BY piece_id',
+      [puzzle.id],
+    )
+
+    res.json({
+      puzzle: {
+        id: puzzle.id,
+        rows: puzzle.rows,
+        cols: puzzle.cols,
+        seed: puzzle.seed,
+        photo: puzzle.photo,
+        createdAt: puzzle.created_at,
+      },
+      positions: placed.rows.map((p) => ({ pieceId: p.piece_id, x: p.x, y: p.y })),
+    })
+  } catch (err) {
+    console.error('Could not load puzzle:', err)
+    res.status(503).json({ error: 'Database not reachable' })
+  }
+})
+
+app.listen(PORT, (err?: Error) => {
+  if (err) {
+    console.error('Could not start the server:', err.message)
+    process.exit(1)
+  }
+  console.log(`API listening on http://localhost:${PORT}`)
+})
