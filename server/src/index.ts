@@ -1,6 +1,7 @@
 import express from 'express'
 import dns from 'node:dns'
 import { pool } from './db.js'
+import type { NextFunction, Request, Response } from 'express'
 
 dns.setDefaultResultOrder('ipv4first')  
 
@@ -125,3 +126,62 @@ app.post('/api/players', async (_req, res) => {
     res.status(503).json({ error: 'Database not reachable' })
   }
 })
+
+app.post('/api/puzzles', requirePlayer, async (req, res) => {
+  const { rows, cols, seed, photo } = (req.body ?? {}) as Record<string, unknown>
+
+  if (!isIntInRange(rows, 1, 30) || !isIntInRange(cols, 1, 30) || !isIntInRange(seed, 0, 2147483647)) {
+    res.status(400).json({ error: 'rows and cols must be whole numbers from 1 to 30, and seed a whole number from 0 up' })
+    return
+  }
+  if (
+    typeof photo !== 'object' ||
+    photo === null ||
+    Array.isArray(photo) ||
+    typeof (photo as { id?: unknown }).id !== 'string'
+  ) {
+    res.status(400).json({ error: 'photo must be an object with a string id' })
+    return
+  }
+
+  try {
+    const { rows: created } = await pool.query<{ id: string; created_at: Date }>(
+      `INSERT INTO puzzles (player_id, rows, cols, seed, photo)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, created_at`,
+      [res.locals.playerId, rows, cols, seed, JSON.stringify(photo)],
+    )
+    res.status(201).json({ id: created[0].id, createdAt: created[0].created_at })
+  } catch (err) {
+    console.error('Could not create puzzle:', err)
+    res.status(503).json({ error: 'Database not reachable' })
+  }
+})
+
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Runs before routes that need to know who is asking.
+async function requirePlayer(req: Request, res: Response, next: NextFunction) {
+  const id = req.header('X-Player-Id')
+  if (!id || !UUID_RE.test(id)) {
+    res.status(401).json({ error: 'Missing or invalid X-Player-Id header' })
+    return
+  }
+  try {
+    const { rowCount } = await pool.query('SELECT 1 FROM players WHERE id = $1', [id])
+    if (rowCount === 0) {
+      res.status(401).json({ error: 'Unknown player' })
+      return
+    }
+    res.locals.playerId = id
+    next()
+  } catch (err) {
+    console.error('Player lookup failed:', err)
+    res.status(503).json({ error: 'Database not reachable' })
+  }
+}
+
+function isIntInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+}
