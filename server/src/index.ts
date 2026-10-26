@@ -77,13 +77,7 @@ app.get('/api/puzzle-image', async (req, res) => {
   }
 })
 
-app.listen(PORT, (err?: Error) => {
-  if (err) {
-    console.error('Could not start the server:', err.message)
-    process.exit(1)
-  }
-  console.log(`API listening on http://localhost:${PORT}`)
-})
+
 
 
 app.post('/api/photos/:id/download', async (req, res) => {
@@ -185,3 +179,12 @@ async function requirePlayer(req: Request, res: Response, next: NextFunction) {
 function isIntInRange(value: unknown, min: number, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 }
+
+
+app.listen(PORT, (err?: Error) => {
+  if (err) {
+    console.error('Could not start the server:', err.message)
+    process.exit(1)
+  }
+  console.log(`API listening on http://localhost:${PORT}`)
+})
