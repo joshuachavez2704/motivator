@@ -1,22 +1,36 @@
 import express from 'express'
 import dns from 'node:dns'
 import { pool } from './db.js'
-import type { NextFunction, Request, Response } from 'express'
+import { authRouter, requireUser } from './auth.js'
 
-dns.setDefaultResultOrder('ipv4first')  
+dns.setDefaultResultOrder('ipv4first')
 
 const app = express()
 
 app.use(express.json())
 
+// log every request (method and URL only: never bodies, so passwords stay out of the logs)
 app.use((req, _res, next) => {
   console.log(new Date().toISOString(), req.method, req.url)
   next()
 })
 
+// register, login, logout, me
+app.use('/api', authRouter)
+
 // a route with no outside calls, only to prove the server answers
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+app.get('/api/health/db', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1')
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('Database check failed:', err)
+    res.status(503).json({ ok: false, error: 'Database not reachable' })
+  }
 })
 
 const PORT = Number(process.env.PORT ?? 3001)
@@ -26,6 +40,8 @@ if (!accessKey) {
   console.error('Missing UNSPLASH_ACCESS_KEY. Put it in server/.env')
   process.exit(1)
 }
+
+// ---------------------------------------------------------------- Unsplash
 
 // The parts of Unsplash's response that we use
 type UnsplashPhoto = {
@@ -77,9 +93,6 @@ app.get('/api/puzzle-image', async (req, res) => {
   }
 })
 
-
-
-
 app.post('/api/photos/:id/download', async (req, res) => {
   const { id } = req.params
   // only letters, digits, - and _ : never build a URL from unchecked input
@@ -98,30 +111,16 @@ app.post('/api/photos/:id/download', async (req, res) => {
   }
 })
 
+// ----------------------------------------------------------------- puzzles
 
-app.get('/api/health/db', async (_req, res) => {
-  try {
-    await pool.query('SELECT 1')
-    res.json({ ok: true })
-  } catch (err) {
-    console.error('Database check failed:', err)
-    res.status(503).json({ ok: false, error: 'Database not reachable' })
-  }
-})
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-app.post('/api/players', async (_req, res) => {
-  try {
-    const { rows } = await pool.query<{ id: string }>(
-      'INSERT INTO players DEFAULT VALUES RETURNING id',
-    )
-    res.status(201).json({ id: rows[0].id })
-  } catch (err) {
-    console.error('Could not create player:', err)
-    res.status(503).json({ error: 'Database not reachable' })
-  }
-})
+function isIntInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+}
 
-app.post('/api/puzzles', requirePlayer, async (req, res) => {
+// Start a new puzzle for the signed-in user.
+app.post('/api/puzzles', requireUser, async (req, res) => {
   const { rows, cols, seed, photo } = (req.body ?? {}) as Record<string, unknown>
 
   if (!isIntInRange(rows, 1, 30) || !isIntInRange(cols, 1, 30) || !isIntInRange(seed, 0, 2147483647)) {
@@ -140,10 +139,10 @@ app.post('/api/puzzles', requirePlayer, async (req, res) => {
 
   try {
     const { rows: created } = await pool.query<{ id: string; created_at: Date }>(
-      `INSERT INTO puzzles (player_id, rows, cols, seed, photo)
+      `INSERT INTO puzzles (user_id, rows, cols, seed, photo)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, created_at`,
-      [res.locals.playerId, rows, cols, seed, JSON.stringify(photo)],
+      [res.locals.userId, rows, cols, seed, JSON.stringify(photo)],
     )
     res.status(201).json({ id: created[0].id, createdAt: created[0].created_at })
   } catch (err) {
@@ -152,35 +151,8 @@ app.post('/api/puzzles', requirePlayer, async (req, res) => {
   }
 })
 
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-// Runs before routes that need to know who is asking.
-async function requirePlayer(req: Request, res: Response, next: NextFunction) {
-  const id = req.header('X-Player-Id')
-  if (!id || !UUID_RE.test(id)) {
-    res.status(401).json({ error: 'Missing or invalid X-Player-Id header' })
-    return
-  }
-  try {
-    const { rowCount } = await pool.query('SELECT 1 FROM players WHERE id = $1', [id])
-    if (rowCount === 0) {
-      res.status(401).json({ error: 'Unknown player' })
-      return
-    }
-    res.locals.playerId = id
-    next()
-  } catch (err) {
-    console.error('Player lookup failed:', err)
-    res.status(503).json({ error: 'Database not reachable' })
-  }
-}
-
-function isIntInRange(value: unknown, min: number, max: number): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
-}
-
-app.get('/api/puzzle', requirePlayer, async (_req, res) => {
+// The user's current (newest) puzzle with the pieces placed on the board.
+app.get('/api/puzzle', requireUser, async (_req, res) => {
   try {
     const { rows } = await pool.query<{
       id: string
@@ -192,14 +164,14 @@ app.get('/api/puzzle', requirePlayer, async (_req, res) => {
     }>(
       `SELECT id, rows, cols, seed, photo, created_at
        FROM puzzles
-       WHERE player_id = $1
+       WHERE user_id = $1
        ORDER BY created_at DESC
        LIMIT 1`,
-      [res.locals.playerId],
+      [res.locals.userId],
     )
     const puzzle = rows[0]
     if (!puzzle) {
-      // a brand-new player has no puzzle yet: that is normal, not an error
+      // a user with no puzzle yet is normal, not an error
       res.json({ puzzle: null, positions: [] })
       return
     }
@@ -225,6 +197,84 @@ app.get('/api/puzzle', requirePlayer, async (_req, res) => {
     res.status(503).json({ error: 'Database not reachable' })
   }
 })
+
+// Finds a puzzle only if it belongs to this user. Returns null otherwise,
+// so we never reveal whether someone else's puzzle exists.
+async function findOwnedPuzzle(puzzleId: string, userId: string) {
+  if (!UUID_RE.test(puzzleId)) return null
+  const { rows } = await pool.query<{ rows: number; cols: number }>(
+    'SELECT rows, cols FROM puzzles WHERE id = $1 AND user_id = $2',
+    [puzzleId, userId],
+  )
+  return rows[0] ?? null
+}
+
+// Parses ":pieceId" from the URL; returns null unless it is a valid piece number.
+function parsePieceId(raw: string, puzzle: { rows: number; cols: number }): number | null {
+  if (!/^\d+$/.test(raw)) return null
+  const id = Number(raw)
+  return id < puzzle.rows * puzzle.cols ? id : null
+}
+
+// Save (or move) a piece that has been dropped on the board.
+app.put('/api/puzzles/:puzzleId/pieces/:pieceId', requireUser, async (req, res) => {
+  const { x, y } = (req.body ?? {}) as Record<string, unknown>
+  // positions are fractions of the board (0 to 1); allow a little slack past the edges
+  const ok = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && v >= -0.5 && v <= 1.5
+  if (!ok(x) || !ok(y)) {
+    res.status(400).json({ error: 'x and y must be numbers between -0.5 and 1.5' })
+    return
+  }
+
+  const { puzzleId, pieceId: rawPieceId } = req.params as { puzzleId: string; pieceId: string }
+
+  try {
+    const puzzle = await findOwnedPuzzle(puzzleId, res.locals.userId)
+    const pieceId = puzzle && parsePieceId(rawPieceId, puzzle)
+    if (!puzzle || pieceId === null) {
+      res.status(404).json({ error: 'Puzzle or piece not found' })
+      return
+    }
+
+    // upsert: insert the piece, or update its position if it is already placed
+    await pool.query(
+      `INSERT INTO piece_positions (puzzle_id, piece_id, x, y)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (puzzle_id, piece_id) DO UPDATE SET x = EXCLUDED.x, y = EXCLUDED.y`,
+      [puzzleId, pieceId, x, y],
+    )
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not save piece:', err)
+    res.status(503).json({ error: 'Database not reachable' })
+  }
+})
+
+// Put a piece back in the tray: no row means "in the tray".
+app.delete('/api/puzzles/:puzzleId/pieces/:pieceId', requireUser, async (req, res) => {
+  const { puzzleId, pieceId: rawPieceId } = req.params as { puzzleId: string; pieceId: string }
+
+  try {
+    const puzzle = await findOwnedPuzzle(puzzleId, res.locals.userId)
+    const pieceId = puzzle && parsePieceId(rawPieceId, puzzle)
+    if (!puzzle || pieceId === null) {
+      res.status(404).json({ error: 'Puzzle or piece not found' })
+      return
+    }
+
+    await pool.query('DELETE FROM piece_positions WHERE puzzle_id = $1 AND piece_id = $2', [
+      puzzleId,
+      pieceId,
+    ])
+    res.status(204).end()
+  } catch (err) {
+    console.error('Could not remove piece:', err)
+    res.status(503).json({ error: 'Database not reachable' })
+  }
+})
+
+// ------------------------------------------------------------------- start
 
 app.listen(PORT, (err?: Error) => {
   if (err) {
