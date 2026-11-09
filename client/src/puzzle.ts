@@ -1,4 +1,5 @@
 import type { Puzzle, Piece, BoardPosition } from './types'
+import { mulberry32 } from './shapes'
 
 export function piecesEarned(
   completedWeight: number,
@@ -162,9 +163,35 @@ export function connectedGroup(
   return group
 }
 
-// Pieces are earned in a fixed order (for now the piece id: top-left to
-// bottom-right). If the player has earned 5 pieces, the first 5 are theirs
-// and the rest are still locked.
-export function isEarned(piece: Piece, earned: number): boolean {
-  return piece.id < earned
+// A fresh random seed for a new puzzle. It decides the piece shapes and the order
+// pieces are earned in. It stays below 2^31 so the database can store it as an integer.
+export function randomSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31)
+}
+
+// Pieces are earned in a shuffled order that depends on the puzzle's seed, so a new
+// puzzle does not always hand out the top-left pieces first.
+// Returns rank[pieceId] = the position in the earning order (0 = earned first).
+export function earnRanks(count: number, seed: number): number[] {
+  // a different stream of random numbers than the one the shapes use
+  const rand = mulberry32(seed ^ 0x9e3779b9)
+
+  // shuffle the piece ids (Fisher-Yates)
+  const order = Array.from({ length: count }, (_, i) => i)
+  for (let i = count - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+
+  // order[k] is the piece earned k-th; flip it so we can look a piece's rank up
+  const rank = new Array<number>(count)
+  order.forEach((pieceId, k) => {
+    rank[pieceId] = k
+  })
+  return rank
+}
+
+// A piece is earned when its rank is below the number of pieces the player has earned.
+export function isEarned(piece: Piece, earned: number, rank: number[]): boolean {
+  return rank[piece.id] < earned
 }

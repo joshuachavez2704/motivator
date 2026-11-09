@@ -25,7 +25,7 @@ export type PuzzleShape = {
 }
 
 // A small seeded random number generator: same seed, same sequence.
-function mulberry32(seed: number) {
+export function mulberry32(seed: number) {
   let a = seed | 0
   return () => {
     a = (a + 0x6d2b79f5) | 0

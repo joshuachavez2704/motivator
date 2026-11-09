@@ -10,6 +10,7 @@ import {
   connectedGroup,
   demoPuzzle,
   isEarned,
+  earnRanks
 } from './puzzle'
 import { generateShape, TAB_MARGIN } from './shapes'
 import type { Task, Piece, BoardPosition, Puzzle } from './types'
@@ -54,15 +55,21 @@ function App() {
   const boardRef = useRef<HTMLDivElement>(null)
   const trayRef = useRef<HTMLDivElement>(null)
 
-  // the shapes only depend on the puzzle, so build them once
-  const shape = useMemo(() => generateShape(demoPuzzle), [])
-
-  // the photo from Unsplash (via our API); until it arrives the pieces are plain colours
-  const { photo, loading, error, fetchNew } = usePuzzlePhoto()
+  // the photo from Unsplash (via our API) and this puzzle's seed;
+  // until the photo arrives the pieces are plain colours
+  const { photo, seed, loading, error, startNew } = usePuzzlePhoto()
   const puzzle: Puzzle = {
     ...demoPuzzle,
+    seed,
     imageUrl: photo ? sizedPhotoUrl(photo.imageUrl, demoPuzzle) : '',
   }
+
+  // the shapes and the earning order both come from the seed: a new seed, a new puzzle
+  const shape = useMemo(() => generateShape({ ...demoPuzzle, seed }), [seed])
+  const earnRank = useMemo(
+    () => earnRanks(demoPuzzle.rows * demoPuzzle.cols, seed),
+    [seed],
+  )
 
   const completedWeight = tasks
     .filter((task) => task.done)
@@ -72,8 +79,15 @@ function App() {
 
   // the tray only holds pieces that are earned and not on the board yet
   const trayPieces = allPieces.filter(
-    (p) => p.position === null && isEarned(p, pieces),
+    (p) => p.position === null && isEarned(p, pieces, earnRank),
   )
+
+  // a new puzzle: new photo, new shapes, empty board. The earned pieces are not lost:
+  // how many you have earned comes from your tasks, so they all wait in the tray again.
+  async function newPuzzle() {
+    const started = await startNew()
+    if (started) setAllPieces(createPieces(demoPuzzle))
+  }
 
   function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -348,7 +362,7 @@ function App() {
       <ImagePreview imageUrl={puzzle.imageUrl} />
 
       <div>
-        <button type="button" onClick={fetchNew} disabled={loading}>
+        <button type="button" onClick={newPuzzle} disabled={loading}>
           {loading ? 'Loading photo…' : 'New photo'}
         </button>
         {error && <span role="alert"> Could not load a photo: {error}</span>}
