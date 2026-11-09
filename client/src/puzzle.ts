@@ -195,3 +195,16 @@ export function earnRanks(count: number, seed: number): number[] {
 export function isEarned(piece: Piece, earned: number, rank: number[]): boolean {
   return rank[piece.id] < earned
 }
+
+// Puts pieces back on the board where the server remembers them.
+// Pieces without a saved position stay in the tray.
+export function placePieces(
+  pieces: Piece[],
+  saved: { pieceId: number; x: number; y: number }[],
+): Piece[] {
+  const byId = new Map(saved.map((s) => [s.pieceId, { x: s.x, y: s.y }]))
+  return pieces.map((piece) => {
+    const position = byId.get(piece.id)
+    return position ? { ...piece, position } : piece
+  })
+}

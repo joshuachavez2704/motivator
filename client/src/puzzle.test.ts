@@ -10,6 +10,7 @@ import {
   earnRanks,
   isEarned,
   randomSeed,
+  placePieces,
   demoPuzzle,
 } from './puzzle'
 import type { Piece, BoardPosition } from './types'
@@ -204,5 +205,24 @@ describe('randomSeed', () => {
       expect(seed).toBeGreaterThanOrEqual(0)
       expect(seed).toBeLessThanOrEqual(2147483647)
     }
+  })
+})
+
+describe('placePieces', () => {
+  it('puts a piece back where it was saved and leaves the rest in the tray', () => {
+    const placed = placePieces(createPieces(demoPuzzle), [{ pieceId: 3, x: 0.25, y: 0.5 }])
+    expect(placed[3].position).toEqual({ x: 0.25, y: 0.5 })
+    expect(placed.filter((p) => p.position !== null)).toHaveLength(1)
+  })
+
+  it('does nothing when nothing was saved', () => {
+    const placed = placePieces(createPieces(demoPuzzle), [])
+    expect(placed.every((p) => p.position === null)).toBe(true)
+  })
+
+  it('does not change the pieces it was given', () => {
+    const original = createPieces(demoPuzzle)
+    placePieces(original, [{ pieceId: 0, x: 0.1, y: 0.1 }])
+    expect(original[0].position).toBeNull()
   })
 })

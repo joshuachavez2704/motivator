@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import type { SubmitEvent, PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
 import {
@@ -8,16 +8,17 @@ import {
   sizedPhotoUrl,
   snapToNeighbors,
   connectedGroup,
-  demoPuzzle,
   isEarned,
-  earnRanks
+  earnRanks,
+  placePieces,
+  demoPuzzle,
 } from './puzzle'
 import { generateShape, TAB_MARGIN } from './shapes'
 import type { Task, Piece, BoardPosition, Puzzle } from './types'
 import Board from './Board'
 import PieceView from './PieceView'
 import ImagePreview from './ImagePreview'
-import { usePuzzlePhoto } from './usePuzzlePhoto'
+import type { PuzzleSession } from './puzzle-session'
 
 // one piece being carried, positioned relative to the piece you grabbed (in pixels)
 type DragMember = { id: number; dx: number; dy: number }
@@ -41,23 +42,30 @@ function isInside(r: DOMRect, x: number, y: number) {
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
 }
 
-function App() {
+function App({ session }: { session: PuzzleSession }) {
+  // where the puzzle lives (this browser or the server) is decided outside of App
+  const { photo, seed, loading, error, saveError, initialPositions, startNew, savePieces } =
+    session
+
   const [text, setText] = useState('')
   const [tasks, setTasks] = useState<Task[]>([])
   const [weight, setWeight] = useState(1)
   const [piecesPerPoint, setPiecesPerPoint] = useState(2)
   const [dailyCap, setDailyCap] = useState(20)
   const [allPieces, setAllPieces] = useState<Piece[]>(() =>
-    createPieces(demoPuzzle),
+    placePieces(createPieces(demoPuzzle), initialPositions),
   )
   const [drag, setDrag] = useState<DragState | null>(null)
 
   const boardRef = useRef<HTMLDivElement>(null)
   const trayRef = useRef<HTMLDivElement>(null)
 
-  // the photo from Unsplash (via our API) and this puzzle's seed;
+  // tell the session after every change, so it can save what moved
+  useEffect(() => {
+    savePieces(allPieces)
+  }, [allPieces, savePieces])
+
   // until the photo arrives the pieces are plain colours
-  const { photo, seed, loading, error, startNew } = usePuzzlePhoto()
   const puzzle: Puzzle = {
     ...demoPuzzle,
     seed,
@@ -244,12 +252,12 @@ function App() {
       members = connectedGroup(piece.id, allPieces, demoPuzzle).flatMap((m) =>
         m.position
           ? [
-            {
-              id: m.id,
-              dx: (m.position.x - start.x) * board.width,
-              dy: (m.position.y - start.y) * board.height,
-            },
-          ]
+              {
+                id: m.id,
+                dx: (m.position.x - start.x) * board.width,
+                dy: (m.position.y - start.y) * board.height,
+              },
+            ]
           : [],
       )
     }
@@ -345,18 +353,20 @@ function App() {
 
       <div className="tray" ref={trayRef}>
         {trayPieces.length === 0 && (
-          <span className="tray-empty">Complete tasks to earn puzzle pieces</span>
+          <span className="tray-empty">
+            Complete tasks to earn puzzle pieces
+          </span>
         )}
         {trayPieces.map((p) => (
-          <PieceView
-            key={p.id}
-            piece={p}
-            puzzle={puzzle}
-            shape={shape}
-            onPointerDown={startDrag}
-            style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
-          />
-        ))}
+            <PieceView
+              key={p.id}
+              piece={p}
+              puzzle={puzzle}
+              shape={shape}
+              onPointerDown={startDrag}
+              style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
+            />
+          ))}
       </div>
 
       <ImagePreview imageUrl={puzzle.imageUrl} />
@@ -366,6 +376,7 @@ function App() {
           {loading ? 'Loading photo…' : 'New photo'}
         </button>
         {error && <span role="alert"> Could not load a photo: {error}</span>}
+        {saveError && <span role="alert"> {saveError}</span>}
       </div>
 
       <Board
