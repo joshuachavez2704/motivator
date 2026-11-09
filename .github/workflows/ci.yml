@@ -23,6 +23,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build   # the template's build also runs the TypeScript check
+      - run: npm test
       
   server: 
     runs-on: ubuntu-latest
