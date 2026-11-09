@@ -32,7 +32,7 @@ function writeSaved(puzzle: SavedPuzzle) {
 }
 
 // Asks our API for a random photo. Pure data in, data out: it never touches React state.
-async function requestPhoto(): Promise<PuzzlePhoto> {
+export async function requestPhoto(): Promise<PuzzlePhoto> {
   const res = await fetch('/api/puzzle-image')
   if (!res.ok) throw new Error(`The server answered ${res.status}`)
   const data = (await res.json()) as PuzzlePhoto
