@@ -2,6 +2,7 @@ import express from 'express'
 import dns from 'node:dns'
 import { pool } from './db.js'
 import { authRouter, requireUser } from './auth.js'
+import { trackingRouter } from './tracking.js'
 
 dns.setDefaultResultOrder('ipv4first')
 
@@ -17,6 +18,9 @@ app.use((req, _res, next) => {
 
 // register, login, logout, me
 app.use('/api', authRouter)
+
+// habits, to-dos, piece values and pieces earned
+app.use('/api', trackingRouter)
 
 // a route with no outside calls, only to prove the server answers
 app.get('/api/health', (_req, res) => {
