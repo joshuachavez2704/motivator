@@ -14,6 +14,8 @@ export type PuzzleSession = {
   // pieces earned so far, counted by the server; null means this player has no tracking
   // (a guest), so App counts pieces from its own task list instead
   earnedTotal: number | null
+  // the most pieces the tray shows at once (the daily limit); null means App uses its own
+  dailyCap: number | null
   startNew: () => Promise<boolean> // true if a new puzzle was started
   savePieces: (pieces: Piece[]) => void // App calls this whenever the pieces change
 }

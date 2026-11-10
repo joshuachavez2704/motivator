@@ -16,7 +16,7 @@ export type AccountStart = {
 
 // A puzzle that lives on the server. The game reports every change to the pieces,
 // and we send the differences to the server, one request at a time and in order.
-export function useAccountSession(start: AccountStart): Omit<PuzzleSession, 'earnedTotal'> {
+export function useAccountSession(start: AccountStart): Omit<PuzzleSession, 'earnedTotal' | 'dailyCap'> {
   const [photo, setPhoto] = useState(start.photo)
   const [seed, setSeed] = useState(start.seed)
   const [loading, setLoading] = useState(false)

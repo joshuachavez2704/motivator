@@ -17,6 +17,7 @@ export default function GuestGame() {
         error,
         saveError: null,
         earnedTotal: null,
+        dailyCap: null,
         initialPositions: nothingPlaced,
         startNew,
         savePieces: noSave,

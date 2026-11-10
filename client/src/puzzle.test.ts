@@ -11,6 +11,8 @@ import {
   isEarned,
   randomSeed,
   placePieces,
+  trayOrder,
+  trayWindow,
   demoPuzzle,
 } from './puzzle'
 import type { Piece, BoardPosition } from './types'
@@ -224,5 +226,66 @@ describe('placePieces', () => {
     const original = createPieces(demoPuzzle)
     placePieces(original, [{ pieceId: 0, x: 0.1, y: 0.1 }])
     expect(original[0].position).toBeNull()
+  })
+})
+
+describe('trayOrder', () => {
+  const rank = earnRanks(24, 11)
+  const byRank = (pieces: Piece[]) => pieces.map((p) => rank[p.id])
+
+  it('lists earned pieces that are not on the board, in the order they were earned', () => {
+    const order = trayOrder(createPieces(demoPuzzle), 10, rank, [])
+    expect(order).toHaveLength(10)
+    expect(byRank(order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+
+  it('leaves out pieces that are already on the board', () => {
+    const earnedFirst = createPieces(demoPuzzle).find((p) => rank[p.id] === 0)!
+    const pieces = withPositions({ [earnedFirst.id]: { x: 0.1, y: 0.1 } })
+    const order = trayOrder(pieces, 3, rank, [])
+    expect(order.map((p) => p.id)).not.toContain(earnedFirst.id)
+    expect(order).toHaveLength(2)
+  })
+
+  it('puts a piece you just put back at the front', () => {
+    const pieces = createPieces(demoPuzzle)
+    const lastEarned = pieces.find((p) => rank[p.id] === 4)!
+    const order = trayOrder(pieces, 5, rank, [lastEarned.id])
+    expect(order[0].id).toBe(lastEarned.id)
+    expect(order).toHaveLength(5)
+  })
+
+  it('ignores a "put back" piece that is not earned or is on the board', () => {
+    const pieces = createPieces(demoPuzzle)
+    const unearned = pieces.find((p) => rank[p.id] === 20)!
+    expect(trayOrder(pieces, 5, rank, [unearned.id])).toHaveLength(5)
+  })
+})
+
+describe('trayWindow', () => {
+  const list = [0, 1, 2, 3, 4, 5, 6]
+
+  it('shows everything when it all fits', () => {
+    expect(trayWindow(list, 0, 10)).toEqual(list)
+  })
+
+  it('shows only the limit, from the start', () => {
+    expect(trayWindow(list, 0, 3)).toEqual([0, 1, 2])
+  })
+
+  it('moves to the next batch', () => {
+    expect(trayWindow(list, 3, 3)).toEqual([3, 4, 5])
+  })
+
+  it('wraps around to the front', () => {
+    expect(trayWindow(list, 6, 3)).toEqual([6, 0, 1])
+  })
+
+  it('shows every piece before repeating one', () => {
+    const seen = new Set<number>()
+    for (let offset = 0; offset < 7; offset += 3) {
+      trayWindow(list, offset, 3).forEach((n) => seen.add(n))
+    }
+    expect(seen.size).toBe(7)
   })
 })

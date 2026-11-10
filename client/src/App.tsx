@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import type { SubmitEvent, PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
+import './tray.css'
 import {
   piecesEarned,
   createPieces,
@@ -8,9 +9,10 @@ import {
   sizedPhotoUrl,
   snapToNeighbors,
   connectedGroup,
-  isEarned,
   earnRanks,
   placePieces,
+  trayOrder,
+  trayWindow,
   demoPuzzle,
 } from './puzzle'
 import { generateShape, TAB_MARGIN } from './shapes'
@@ -56,6 +58,9 @@ function App({ session }: { session: PuzzleSession }) {
     placePieces(createPieces(demoPuzzle), initialPositions),
   )
   const [drag, setDrag] = useState<DragState | null>(null)
+  // which batch of waiting pieces the tray is showing, and the pieces you just put back
+  const [trayOffset, setTrayOffset] = useState(0)
+  const [returned, setReturned] = useState<number[]>([])
 
   const boardRef = useRef<HTMLDivElement>(null)
   const trayRef = useRef<HTMLDivElement>(null)
@@ -86,16 +91,26 @@ function App({ session }: { session: PuzzleSession }) {
   // a signed-in player's count comes from the server; a guest's from the tasks on this page
   const pieces = earnedTotal ?? piecesEarned(completedWeight, piecesPerPoint, dailyCap)
 
-  // the tray only holds pieces that are earned and not on the board yet
-  const trayPieces = allPieces.filter(
-    (p) => p.position === null && isEarned(p, pieces, earnRank),
-  )
+  // The tray shows at most as many pieces as the daily limit. The rest wait out of sight
+  // (the "+N" tile) and "Reload tray" brings the next batch in.
+  const trayLimit = Math.max(1, session.dailyCap ?? dailyCap)
+  const waiting = trayOrder(allPieces, pieces, earnRank, returned)
+  const trayPieces = trayWindow(waiting, trayOffset, trayLimit)
+  const hiddenCount = waiting.length - trayPieces.length
+
+  function reloadTray() {
+    setTrayOffset((offset) => (offset + trayLimit) % Math.max(1, waiting.length))
+  }
 
   // a new puzzle: new photo, new shapes, empty board. The earned pieces are not lost:
   // how many you have earned comes from your tasks, so they all wait in the tray again.
   async function newPuzzle() {
     const started = await startNew()
-    if (started) setAllPieces(createPieces(demoPuzzle))
+    if (started) {
+      setAllPieces(createPieces(demoPuzzle))
+      setTrayOffset(0)
+      setReturned([])
+    }
   }
 
   function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
@@ -234,6 +249,12 @@ function App({ session }: { session: PuzzleSession }) {
       }
     } else if (tray && isInside(tray, x, y) && ids.length === 1) {
       movePiece(id, null) // groups can't go back to the tray
+      // a piece you take off the board should be visible in the tray, not hidden in the
+      // reserve. (Dropping a piece that was already in the tray changes nothing.)
+      if (allPieces.find((p) => p.id === id)?.position) {
+        setReturned((prev) => [id, ...prev.filter((other) => other !== id)])
+        setTrayOffset(0)
+      }
     }
     // dropped somewhere else: everything stays where it was
   }
@@ -376,7 +397,15 @@ function App({ session }: { session: PuzzleSession }) {
               style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
             />
           ))}
+        {hiddenCount > 0 && <span className="tray-more">+{hiddenCount}</span>}
       </div>
+      {hiddenCount > 0 && (
+        <div className="tray-controls">
+          <button type="button" onClick={reloadTray}>
+            Reload tray
+          </button>
+        </div>
+      )}
 
       <ImagePreview imageUrl={puzzle.imageUrl} />
 

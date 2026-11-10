@@ -208,3 +208,31 @@ export function placePieces(
     return position ? { ...piece, position } : piece
   })
 }
+
+// Every earned piece that is not on the board, in the order the tray cycles through them:
+// pieces you just put back first (so they are right there), then the rest in the order
+// they were earned.
+export function trayOrder(
+  pieces: Piece[],
+  earned: number,
+  rank: number[],
+  returned: number[],
+): Piece[] {
+  const waiting = pieces.filter((p) => p.position === null && isEarned(p, earned, rank))
+  const byId = new Map(waiting.map((p) => [p.id, p]))
+  const first = returned.flatMap((id) => {
+    const piece = byId.get(id)
+    return piece ? [piece] : []
+  })
+  const back = new Set(first.map((p) => p.id))
+  const rest = waiting.filter((p) => !back.has(p.id)).sort((a, b) => rank[a.id] - rank[b.id])
+  return [...first, ...rest]
+}
+
+// The part of the tray you can see: `limit` pieces starting at `offset`, wrapping around
+// to the front, so pressing "reload" over and over shows every piece before repeating.
+export function trayWindow<T>(list: T[], offset: number, limit: number): T[] {
+  if (list.length <= limit) return list
+  const start = offset % list.length
+  return Array.from({ length: limit }, (_, i) => list[(start + i) % list.length])
+}
