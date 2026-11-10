@@ -52,6 +52,16 @@ function PieceView({ piece, puzzle, shape, style, ghost, onPointerDown }: Props)
           />
         )}
 
+        {/* a light halo under the dark outline, so pieces stay visible on dark photos */}
+        <path
+          d={path}
+          fill="none"
+          stroke="rgba(255, 255, 255, 0.55)"
+          strokeWidth={2.5}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+
         <path
           className="piece-hit"
           d={path}
