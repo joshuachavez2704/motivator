@@ -1,0 +1,16 @@
+/* the "+N" tile at the end of a tray that has more pieces waiting out of sight */
+.tray-more {
+  align-self: center;
+  padding: 4px 10px;
+  border: 1px solid var(--border, #2e303a);
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.tray-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+}

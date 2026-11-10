@@ -69,7 +69,13 @@ function AccountPlay({ start }: { start: AccountStart }) {
         <TrackingScreen tracking={tracking} />
       </div>
       <div hidden={view !== 'puzzle'}>
-        <App session={{ ...session, earnedTotal: tracking.data?.earnedTotal ?? 0 }} />
+        <App
+          session={{
+            ...session,
+            earnedTotal: tracking.data?.earnedTotal ?? 0,
+            dailyCap: tracking.data?.settings.dailyCap ?? null,
+          }}
+        />
       </div>
     </>
   )
