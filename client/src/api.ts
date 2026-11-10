@@ -118,3 +118,72 @@ export async function savePiece(
 export async function removePiece(puzzleId: string, pieceId: number): Promise<void> {
   await request(`/api/puzzles/${puzzleId}/pieces/${pieceId}`, { method: 'DELETE' })
 }
+
+// ---- Habits and to-dos (signed-in players only) ----
+
+export type PieceValues = {
+  habitPieces: number // pieces for each habit done
+  todoPieces: number // pieces for each to-do done
+  focusPieces: number // pieces for finishing "your one thing"
+  dailyCap: number // the most pieces you can earn in one day
+}
+
+export type Habit = { id: number; name: string; done: boolean }
+export type Todo = { id: number; text: string; done: boolean; focus: boolean }
+
+export type TrackingData = {
+  settings: PieceValues
+  habits: Habit[]
+  todos: Todo[]
+  earnedOnDay: number // pieces earned on the day you asked for
+  earnedTotal: number // pieces earned on every day so far
+}
+
+// What the server sends back after a change that affects earnings
+export type Earned = { earnedOnDay: number; earnedTotal: number }
+
+// day looks like "2026-11-10": the player's own local date
+export async function loadTracking(day: string): Promise<TrackingData> {
+  const res = await request(`/api/tracking?day=${day}`)
+  return (await res.json()) as TrackingData
+}
+
+export async function saveSettings(values: PieceValues): Promise<PieceValues> {
+  const res = await request('/api/settings', { method: 'PUT', body: JSON.stringify(values) })
+  return (await res.json()) as PieceValues
+}
+
+export async function createHabit(name: string): Promise<Habit> {
+  const res = await request('/api/habits', { method: 'POST', body: JSON.stringify({ name }) })
+  return (await res.json()) as Habit
+}
+
+export async function deleteHabit(id: number): Promise<void> {
+  await request(`/api/habits/${id}`, { method: 'DELETE' })
+}
+
+export async function setHabitDone(id: number, day: string, done: boolean): Promise<Earned> {
+  const res = await request(`/api/habits/${id}/days/${day}`, {
+    method: 'PUT',
+    body: JSON.stringify({ done }),
+  })
+  return (await res.json()) as Earned
+}
+
+export async function createTodo(day: string, text: string): Promise<Todo> {
+  const res = await request('/api/todos', { method: 'POST', body: JSON.stringify({ day, text }) })
+  return (await res.json()) as Todo
+}
+
+export async function updateTodo(
+  id: number,
+  change: { done?: boolean; text?: string; focus?: boolean },
+): Promise<Earned & { todo: Todo }> {
+  const res = await request(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(change) })
+  return (await res.json()) as Earned & { todo: Todo }
+}
+
+export async function deleteTodo(id: number): Promise<Earned> {
+  const res = await request(`/api/todos/${id}`, { method: 'DELETE' })
+  return (await res.json()) as Earned
+}

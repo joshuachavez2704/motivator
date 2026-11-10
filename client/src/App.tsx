@@ -44,7 +44,7 @@ function isInside(r: DOMRect, x: number, y: number) {
 
 function App({ session }: { session: PuzzleSession }) {
   // where the puzzle lives (this browser or the server) is decided outside of App
-  const { photo, seed, loading, error, saveError, initialPositions, startNew, savePieces } =
+  const { photo, seed, loading, error, saveError, initialPositions, earnedTotal, startNew, savePieces } =
     session
 
   const [text, setText] = useState('')
@@ -83,7 +83,8 @@ function App({ session }: { session: PuzzleSession }) {
     .filter((task) => task.done)
     .reduce((sum, task) => sum + task.weight, 0)
 
-  const pieces = piecesEarned(completedWeight, piecesPerPoint, dailyCap)
+  // a signed-in player's count comes from the server; a guest's from the tasks on this page
+  const pieces = earnedTotal ?? piecesEarned(completedWeight, piecesPerPoint, dailyCap)
 
   // the tray only holds pieces that are earned and not on the board yet
   const trayPieces = allPieces.filter(
@@ -289,67 +290,75 @@ function App({ session }: { session: PuzzleSession }) {
     <main>
       <h1>Habit Puzzle</h1>
 
-      <section>
-        <p>Completed weight today: {completedWeight}</p>
-        <p>
-          Pieces earned today: {pieces} / {dailyCap}
-        </p>
+      {earnedTotal === null ? (
+        <>
+          <section>
+            <p>Completed weight today: {completedWeight}</p>
+            <p>
+              Pieces earned today: {pieces} / {dailyCap}
+            </p>
 
-        <label htmlFor="cap">Daily piece limit: </label>
-        <input
-          id="cap"
-          type="number"
-          min={0}
-          value={dailyCap}
-          onChange={(e) => setDailyCap(Number(e.target.value))}
-        />
-
-        <label htmlFor="rate"> Pieces per weight point: </label>
-        <input
-          id="rate"
-          type="number"
-          min={0}
-          value={piecesPerPoint}
-          onChange={(e) => setPiecesPerPoint(Number(e.target.value))}
-        />
-      </section>
-
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="task">Task: </label>
-        <input
-          id="task"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="What do you need to do?"
-        />
-        <select
-          value={weight}
-          onChange={(e) => setWeight(Number(e.target.value))}
-        >
-          <option value={1}>1 - Light</option>
-          <option value={2}>2</option>
-          <option value={3}>3 - Medium</option>
-          <option value={4}>4</option>
-          <option value={5}>5 - Heavy</option>
-        </select>
-        <button type="submit">Add</button>
-      </form>
-
-      <div>
-        {tasks.map((task) => (
-          <div key={task.id}>
+            <label htmlFor="cap">Daily piece limit: </label>
             <input
-              type="checkbox"
-              checked={task.done}
-              onChange={() => toggleTask(task.id)}
+              id="cap"
+              type="number"
+              min={0}
+              value={dailyCap}
+              onChange={(e) => setDailyCap(Number(e.target.value))}
             />
-            <span>
-              {task.text} (weight {task.weight})
-            </span>
-            <button onClick={() => removeTask(task.id)}>Remove</button>
+
+            <label htmlFor="rate"> Pieces per weight point: </label>
+            <input
+              id="rate"
+              type="number"
+              min={0}
+              value={piecesPerPoint}
+              onChange={(e) => setPiecesPerPoint(Number(e.target.value))}
+            />
+          </section>
+
+          <form onSubmit={handleSubmit}>
+            <label htmlFor="task">Task: </label>
+            <input
+              id="task"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="What do you need to do?"
+            />
+            <select
+              value={weight}
+              onChange={(e) => setWeight(Number(e.target.value))}
+            >
+              <option value={1}>1 - Light</option>
+              <option value={2}>2</option>
+              <option value={3}>3 - Medium</option>
+              <option value={4}>4</option>
+              <option value={5}>5 - Heavy</option>
+            </select>
+            <button type="submit">Add</button>
+          </form>
+
+          <div>
+            {tasks.map((task) => (
+              <div key={task.id}>
+                <input
+                  type="checkbox"
+                  checked={task.done}
+                  onChange={() => toggleTask(task.id)}
+                />
+                <span>
+                  {task.text} (weight {task.weight})
+                </span>
+                <button onClick={() => removeTask(task.id)}>Remove</button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      ) : (
+        <p>
+          <strong>{Math.min(pieces, demoPuzzle.rows * demoPuzzle.cols)}</strong> / {demoPuzzle.rows * demoPuzzle.cols} pieces acquired
+        </p>
+      )}
 
       <div className="tray" ref={trayRef}>
         {trayPieces.length === 0 && (

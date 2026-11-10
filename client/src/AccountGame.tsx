@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTracking } from './useTracking'
+import TrackingScreen from './TrackingScreen'
 import { loadPuzzle, createPuzzle } from './api'
 import type { StoredPhoto } from './api'
 import { demoPuzzle, randomSeed } from './puzzle'
@@ -44,7 +46,31 @@ export default function AccountGame() {
   return <AccountPlay start={start} />
 }
 
+type View = 'tracking' | 'puzzle'
+
+// Two screens that stay alive side by side (the board must not forget where its pieces are
+// when you look at your habits), so the one you are not on is only hidden.
 function AccountPlay({ start }: { start: AccountStart }) {
   const session = useAccountSession(start)
-  return <App session={session} />
+  const tracking = useTracking()
+  const [view, setView] = useState<View>('tracking')
+
+  return (
+    <>
+      <nav className="view-tabs">
+        <button type="button" aria-pressed={view === 'tracking'} onClick={() => setView('tracking')}>
+          Habits
+        </button>
+        <button type="button" aria-pressed={view === 'puzzle'} onClick={() => setView('puzzle')}>
+          Puzzle
+        </button>
+      </nav>
+      <div hidden={view !== 'tracking'}>
+        <TrackingScreen tracking={tracking} />
+      </div>
+      <div hidden={view !== 'puzzle'}>
+        <App session={{ ...session, earnedTotal: tracking.data?.earnedTotal ?? 0 }} />
+      </div>
+    </>
+  )
 }
