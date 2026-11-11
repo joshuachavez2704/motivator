@@ -48,20 +48,44 @@ export default function AccountGame() {
 
 type View = 'tracking' | 'puzzle'
 
+// Remember which screen you were on, so reloading the page doesn't send you back to Habits.
+const VIEW_KEY = 'habitPuzzleView'
+
+function loadView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'puzzle' ? 'puzzle' : 'tracking'
+  } catch {
+    return 'tracking' // storage can be blocked; Habits is a fine place to start
+  }
+}
+
+function saveView(view: View) {
+  try {
+    localStorage.setItem(VIEW_KEY, view)
+  } catch {
+    // storage can be blocked; the screen still switches, it just won't be remembered
+  }
+}
+
 // Two screens that stay alive side by side (the board must not forget where its pieces are
 // when you look at your habits), so the one you are not on is only hidden.
 function AccountPlay({ start }: { start: AccountStart }) {
   const session = useAccountSession(start)
   const tracking = useTracking()
-  const [view, setView] = useState<View>('tracking')
+  const [view, setView] = useState<View>(loadView)
+
+  function showView(next: View) {
+    setView(next)
+    saveView(next)
+  }
 
   return (
     <>
       <nav className="view-tabs">
-        <button type="button" aria-pressed={view === 'tracking'} onClick={() => setView('tracking')}>
+        <button type="button" aria-pressed={view === 'tracking'} onClick={() => showView('tracking')}>
           Habits
         </button>
-        <button type="button" aria-pressed={view === 'puzzle'} onClick={() => setView('puzzle')}>
+        <button type="button" aria-pressed={view === 'puzzle'} onClick={() => showView('puzzle')}>
           Puzzle
         </button>
       </nav>
