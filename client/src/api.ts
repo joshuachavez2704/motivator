@@ -71,6 +71,7 @@ export type SavedPuzzle = {
   cols: number
   seed: number
   photo: StoredPhoto
+  earnedBase: number // earned pieces that were used up before this puzzle began
 }
 
 export type SavedPosition = { pieceId: number; x: number; y: number }
@@ -85,19 +86,19 @@ export async function loadPuzzle(): Promise<{
   return (await res.json()) as { puzzle: SavedPuzzle | null; positions: SavedPosition[] }
 }
 
-// Starts a new puzzle on the server and returns its id.
+// Starts a new puzzle on the server. The server works out how many of your earned pieces
+// are already used up (earnedBase), so only the ones you had not placed carry over.
 export async function createPuzzle(
   rows: number,
   cols: number,
   seed: number,
   photo: StoredPhoto,
-): Promise<string> {
+): Promise<{ id: string; earnedBase: number }> {
   const res = await request('/api/puzzles', {
     method: 'POST',
     body: JSON.stringify({ rows, cols, seed, photo }),
   })
-  const { id } = (await res.json()) as { id: string }
-  return id
+  return (await res.json()) as { id: string; earnedBase: number }
 }
 
 // Remembers where one piece sits on the board (x and y are 0..1 fractions).

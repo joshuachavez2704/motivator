@@ -11,6 +11,7 @@ import {
   isEarned,
   randomSeed,
   placePieces,
+  puzzleSizes,
   trayOrder,
   trayWindow,
   demoPuzzle,
@@ -287,5 +288,22 @@ describe('trayWindow', () => {
       trayWindow(list, offset, 3).forEach((n) => seen.add(n))
     }
     expect(seen.size).toBe(7)
+  })
+})
+
+describe('puzzleSizes', () => {
+  it('lists each size with the right number of pieces', () => {
+    for (const size of puzzleSizes) expect(size.rows * size.cols).toBe(size.pieces)
+  })
+
+  it('keeps the photo\'s 3:2 shape and stays within the server\'s limit of 30', () => {
+    for (const size of puzzleSizes) {
+      expect(size.cols * 2).toBe(size.rows * 3)
+      expect(Math.max(size.rows, size.cols)).toBeLessThanOrEqual(30)
+    }
+  })
+
+  it('offers the 24-piece puzzle the app starts with', () => {
+    expect(puzzleSizes.some((s) => s.rows === demoPuzzle.rows && s.cols === demoPuzzle.cols)).toBe(true)
   })
 })

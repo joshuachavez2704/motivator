@@ -1,4 +1,4 @@
-import type { Piece, PuzzlePhoto } from './types'
+import type { Piece, PuzzlePhoto, PuzzleSize } from './types'
 import type { SavedPosition } from './api'
 
 // Everything the game needs from "wherever the puzzle lives".
@@ -7,15 +7,17 @@ import type { SavedPosition } from './api'
 export type PuzzleSession = {
   photo: PuzzlePhoto | null
   seed: number
+  rows: number // the size of the puzzle when the game opens
+  cols: number
   loading: boolean
   error: string | null // the photo could not be loaded
   saveError: string | null // a move could not be saved
   initialPositions: SavedPosition[] // pieces already on the board when the game opens
-  // pieces earned so far, counted by the server; null means this player has no tracking
-  // (a guest), so App counts pieces from its own task list instead
-  earnedTotal: number | null
+  // pieces earned for this puzzle, counted by the server; null means this player has no
+  // tracking (a guest), so App counts pieces from its own task list instead
+  earned: number | null
   // the most pieces the tray shows at once (the daily limit); null means App uses its own
   dailyCap: number | null
-  startNew: () => Promise<boolean> // true if a new puzzle was started
+  startNew: (size: PuzzleSize) => Promise<boolean> // true if a new puzzle was started
   savePieces: (pieces: Piece[]) => void // App calls this whenever the pieces change
 }

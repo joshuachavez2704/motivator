@@ -7,16 +7,18 @@ const noSave = () => {}
 const nothingPlaced: PuzzleSession['initialPositions'] = []
 
 export default function GuestGame() {
-  const { photo, seed, loading, error, startNew } = usePuzzlePhoto()
+  const { photo, seed, rows, cols, loading, error, startNew } = usePuzzlePhoto()
   return (
     <App
       session={{
         photo,
         seed,
+        rows,
+        cols,
         loading,
         error,
         saveError: null,
-        earnedTotal: null,
+        earned: null,
         dailyCap: null,
         initialPositions: nothingPlaced,
         startNew,

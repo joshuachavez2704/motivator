@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import { createPuzzle, savePiece, removePiece } from './api'
 import type { SavedPosition } from './api'
-import { randomSeed, demoPuzzle } from './puzzle'
+import { randomSeed } from './puzzle'
 import { requestPhoto } from './usePuzzlePhoto'
-import type { Piece, PuzzlePhoto, BoardPosition } from './types'
+import type { Piece, PuzzlePhoto, BoardPosition, PuzzleSize } from './types'
 import type { PuzzleSession } from './puzzle-session'
 
 // What the server told us when the game opened
@@ -11,14 +11,22 @@ export type AccountStart = {
   puzzleId: string
   photo: PuzzlePhoto
   seed: number
+  rows: number
+  cols: number
+  earnedBase: number
   positions: SavedPosition[]
 }
 
 // A puzzle that lives on the server. The game reports every change to the pieces,
 // and we send the differences to the server, one request at a time and in order.
-export function useAccountSession(start: AccountStart): Omit<PuzzleSession, 'earnedTotal' | 'dailyCap'> {
+// (earned and dailyCap come from the habits screen, so the caller adds them)
+export function useAccountSession(
+  start: AccountStart,
+): Omit<PuzzleSession, 'earned' | 'dailyCap'> & { earnedBase: number } {
   const [photo, setPhoto] = useState(start.photo)
   const [seed, setSeed] = useState(start.seed)
+  // earned pieces that were used up on earlier puzzles: they do not count towards this one
+  const [earnedBase, setEarnedBase] = useState(start.earnedBase)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -64,17 +72,18 @@ export function useAccountSession(start: AccountStart): Omit<PuzzleSession, 'ear
   }, [])
 
   // a new photo, a new seed, and a new puzzle on the server (an empty board)
-  const startNew = useCallback(async (): Promise<boolean> => {
+  const startNew = useCallback(async (size: PuzzleSize): Promise<boolean> => {
     setLoading(true)
     setError(null)
     try {
       const nextPhoto = await requestPhoto()
       const nextSeed = randomSeed()
-      const nextId = await createPuzzle(demoPuzzle.rows, demoPuzzle.cols, nextSeed, nextPhoto)
-      puzzleId.current = nextId
+      const created = await createPuzzle(size.rows, size.cols, nextSeed, nextPhoto)
+      puzzleId.current = created.id
       known.current = new Map() // nothing is saved on the new puzzle yet
       setPhoto(nextPhoto)
       setSeed(nextSeed)
+      setEarnedBase(created.earnedBase)
       return true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start a new puzzle')
@@ -84,5 +93,17 @@ export function useAccountSession(start: AccountStart): Omit<PuzzleSession, 'ear
     }
   }, [])
 
-  return { photo, seed, loading, error, saveError, initialPositions: start.positions, startNew, savePieces }
+  return {
+    photo,
+    seed,
+    rows: start.rows,
+    cols: start.cols,
+    earnedBase,
+    loading,
+    error,
+    saveError,
+    initialPositions: start.positions,
+    startNew,
+    savePieces,
+  }
 }

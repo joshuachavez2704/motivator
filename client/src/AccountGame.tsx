@@ -18,13 +18,24 @@ async function openPuzzle(): Promise<AccountStart> {
       puzzleId: puzzle.id,
       photo: puzzle.photo as StoredPhoto as PuzzlePhoto,
       seed: puzzle.seed,
+      rows: puzzle.rows,
+      cols: puzzle.cols,
+      earnedBase: puzzle.earnedBase,
       positions,
     }
   }
   const photo = await requestPhoto()
   const seed = randomSeed()
-  const puzzleId = await createPuzzle(demoPuzzle.rows, demoPuzzle.cols, seed, photo)
-  return { puzzleId, photo, seed, positions: [] }
+  const created = await createPuzzle(demoPuzzle.rows, demoPuzzle.cols, seed, photo)
+  return {
+    puzzleId: created.id,
+    photo,
+    seed,
+    rows: demoPuzzle.rows,
+    cols: demoPuzzle.cols,
+    earnedBase: created.earnedBase,
+    positions: [],
+  }
 }
 
 // The game for a signed-in player: wait for their puzzle, then play it.
@@ -96,7 +107,8 @@ function AccountPlay({ start }: { start: AccountStart }) {
         <App
           session={{
             ...session,
-            earnedTotal: tracking.data?.earnedTotal ?? 0,
+            // pieces earned for THIS puzzle: all earned so far, minus the ones used up before it
+            earned: Math.max(0, (tracking.data?.earnedTotal ?? 0) - session.earnedBase),
             dailyCap: tracking.data?.settings.dailyCap ?? null,
           }}
         />
