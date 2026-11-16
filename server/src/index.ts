@@ -123,6 +123,16 @@ function isIntInRange(value: unknown, min: number, max: number): value is number
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 }
 
+// a photo is a JSON object with at least a string id (the rest is stored as-is)
+function isPhoto(value: unknown): value is { id: string } & Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { id?: unknown }).id === 'string'
+  )
+}
+
 // Start a new puzzle for the signed-in user.
 app.post('/api/puzzles', requireUser, async (req, res) => {
   const { rows, cols, seed, photo } = (req.body ?? {}) as Record<string, unknown>
@@ -131,24 +141,38 @@ app.post('/api/puzzles', requireUser, async (req, res) => {
     res.status(400).json({ error: 'rows and cols must be whole numbers from 1 to 30, and seed a whole number from 0 up' })
     return
   }
-  if (
-    typeof photo !== 'object' ||
-    photo === null ||
-    Array.isArray(photo) ||
-    typeof (photo as { id?: unknown }).id !== 'string'
-  ) {
+  if (!isPhoto(photo)) {
     res.status(400).json({ error: 'photo must be an object with a string id' })
     return
   }
 
   try {
-    const { rows: created } = await pool.query<{ id: string; created_at: Date }>(
-      `INSERT INTO puzzles (user_id, rows, cols, seed, photo)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, created_at`,
-      [res.locals.userId, rows, cols, seed, JSON.stringify(photo)],
+    // Pieces already on the old puzzle's board are used up. Pieces you earned but had not
+    // placed yet come along to the new puzzle, so only those count towards it.
+    // earned_base is how many of your total earned pieces are already spent.
+    let earnedBase = 0
+    const previous = await pool.query<{ id: string; earned_base: number }>(
+      'SELECT id, earned_base FROM puzzles WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [res.locals.userId],
     )
-    res.status(201).json({ id: created[0].id, createdAt: created[0].created_at })
+    if (previous.rows[0]) {
+      const { rows: counts } = await pool.query<{ total: number; placed: number }>(
+        `SELECT coalesce((SELECT sum(pieces) FROM daily_earnings WHERE user_id = $1), 0)::int AS total,
+                (SELECT count(*) FROM piece_positions WHERE puzzle_id = $2)::int AS placed`,
+        [res.locals.userId, previous.rows[0].id],
+      )
+      const { total, placed } = counts[0]
+      const carried = Math.max(0, total - previous.rows[0].earned_base - placed)
+      earnedBase = total - carried
+    }
+
+    const { rows: created } = await pool.query<{ id: string; created_at: Date }>(
+      `INSERT INTO puzzles (user_id, rows, cols, seed, photo, earned_base)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, created_at`,
+      [res.locals.userId, rows, cols, seed, JSON.stringify(photo), earnedBase],
+    )
+    res.status(201).json({ id: created[0].id, createdAt: created[0].created_at, earnedBase })
   } catch (err) {
     console.error('Could not create puzzle:', err)
     res.status(503).json({ error: 'Database not reachable' })
@@ -164,9 +188,10 @@ app.get('/api/puzzle', requireUser, async (_req, res) => {
       cols: number
       seed: number
       photo: unknown
+      earned_base: number
       created_at: Date
     }>(
-      `SELECT id, rows, cols, seed, photo, created_at
+      `SELECT id, rows, cols, seed, photo, earned_base, created_at
        FROM puzzles
        WHERE user_id = $1
        ORDER BY created_at DESC
@@ -192,6 +217,7 @@ app.get('/api/puzzle', requireUser, async (_req, res) => {
         cols: puzzle.cols,
         seed: puzzle.seed,
         photo: puzzle.photo,
+        earnedBase: puzzle.earned_base,
         createdAt: puzzle.created_at,
       },
       positions: placed.rows.map((p) => ({ pieceId: p.piece_id, x: p.x, y: p.y })),
