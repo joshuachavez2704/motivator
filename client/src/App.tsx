@@ -1,477 +1,521 @@
-import { useState, useRef, useMemo, useEffect } from 'react'
-import type { SubmitEvent, PointerEvent as ReactPointerEvent } from 'react'
-import './App.css'
-import './tray.css'
-import {
-  piecesEarned,
-  createPieces,
-  overlaps,
-  sizedPhotoUrl,
-  snapToNeighbors,
-  connectedGroup,
-  earnRanks,
-  placePieces,
-  trayOrder,
-  trayWindow,
-  demoPuzzle,
-} from './puzzle'
-import { generateShape, TAB_MARGIN } from './shapes'
-import type { Task, Piece, BoardPosition, Puzzle } from './types'
-import Board from './Board'
-import PieceView from './PieceView'
-import ImagePreview from './ImagePreview'
-import type { PuzzleSession } from './puzzle-session'
+  import { useState, useRef, useMemo, useEffect } from 'react'
+  import type { SubmitEvent, PointerEvent as ReactPointerEvent } from 'react'
+  import './App.css'
+  import './tray.css'
+  import {
+    piecesEarned,
+    createPieces,
+    overlaps,
+    sizedPhotoUrl,
+    snapToNeighbors,
+    connectedGroup,
+    earnRanks,
+    placePieces,
+    puzzleSizes,
+    trayOrder,
+    trayWindow,
+    demoPuzzle,
+  } from './puzzle'
+  import { generateShape, TAB_MARGIN } from './shapes'
+  import type { Task, Piece, BoardPosition, Puzzle, PuzzleSize } from './types'
+  import Board from './Board'
+  import PieceView from './PieceView'
+  import ImagePreview from './ImagePreview'
+  import type { PuzzleSession } from './puzzle-session'
 
-// one piece being carried, positioned relative to the piece you grabbed (in pixels)
-type DragMember = { id: number; dx: number; dy: number }
+  // one piece being carried, positioned relative to the piece you grabbed (in pixels)
+  type DragMember = { id: number; dx: number; dy: number }
 
-type DragState = {
-  id: number // the piece under your pointer
-  members: DragMember[] // everything being carried (just that piece, unless shift was held)
-  x: number // current pointer position (pixels)
-  y: number
-  gx: number // where inside the piece's box it was grabbed (0 to 1)
-  gy: number
-  width: number // piece box size at pickup (pixels)
-  height: number
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(Math.max(n, min), max)
-}
-
-function isInside(r: DOMRect, x: number, y: number) {
-  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
-}
-
-function App({ session }: { session: PuzzleSession }) {
-  // where the puzzle lives (this browser or the server) is decided outside of App
-  const { photo, seed, loading, error, saveError, initialPositions, earnedTotal, startNew, savePieces } =
-    session
-
-  const [text, setText] = useState('')
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [weight, setWeight] = useState(1)
-  const [piecesPerPoint, setPiecesPerPoint] = useState(2)
-  const [dailyCap, setDailyCap] = useState(20)
-  const [allPieces, setAllPieces] = useState<Piece[]>(() =>
-    placePieces(createPieces(demoPuzzle), initialPositions),
-  )
-  const [drag, setDrag] = useState<DragState | null>(null)
-  // which batch of waiting pieces the tray is showing, and the pieces you just put back
-  const [trayOffset, setTrayOffset] = useState(0)
-  const [returned, setReturned] = useState<number[]>([])
-
-  const boardRef = useRef<HTMLDivElement>(null)
-  const trayRef = useRef<HTMLDivElement>(null)
-
-  // tell the session after every change, so it can save what moved
-  useEffect(() => {
-    savePieces(allPieces)
-  }, [allPieces, savePieces])
-
-  // until the photo arrives the pieces are plain colours
-  const puzzle: Puzzle = {
-    ...demoPuzzle,
-    seed,
-    imageUrl: photo ? sizedPhotoUrl(photo.imageUrl, demoPuzzle) : '',
+  type DragState = {
+    id: number // the piece under your pointer
+    members: DragMember[] // everything being carried (just that piece, unless shift was held)
+    x: number // current pointer position (pixels)
+    y: number
+    gx: number // where inside the piece's box it was grabbed (0 to 1)
+    gy: number
+    width: number // piece box size at pickup (pixels)
+    height: number
   }
 
-  // the shapes and the earning order both come from the seed: a new seed, a new puzzle
-  const shape = useMemo(() => generateShape({ ...demoPuzzle, seed }), [seed])
-  const earnRank = useMemo(
-    () => earnRanks(demoPuzzle.rows * demoPuzzle.cols, seed),
-    [seed],
-  )
-
-  const completedWeight = tasks
-    .filter((task) => task.done)
-    .reduce((sum, task) => sum + task.weight, 0)
-
-  // a signed-in player's count comes from the server; a guest's from the tasks on this page
-  const pieces = earnedTotal ?? piecesEarned(completedWeight, piecesPerPoint, dailyCap)
-
-  // The tray shows at most as many pieces as the daily limit. The rest wait out of sight
-  // (the "+N" tile) and "Reload tray" brings the next batch in.
-  const trayLimit = Math.max(1, session.dailyCap ?? dailyCap)
-  const waiting = trayOrder(allPieces, pieces, earnRank, returned)
-  const trayPieces = trayWindow(waiting, trayOffset, trayLimit)
-  const hiddenCount = waiting.length - trayPieces.length
-
-  function reloadTray() {
-    setTrayOffset((offset) => (offset + trayLimit) % Math.max(1, waiting.length))
+  function clamp(n: number, min: number, max: number) {
+    return Math.min(Math.max(n, min), max)
   }
 
-  // a new puzzle: new photo, new shapes, empty board. The earned pieces are not lost:
-  // how many you have earned comes from your tasks, so they all wait in the tray again.
-  async function newPuzzle() {
-    const started = await startNew()
-    if (started) {
-      setAllPieces(createPieces(demoPuzzle))
-      setTrayOffset(0)
-      setReturned([])
-    }
+  function isInside(r: DOMRect, x: number, y: number) {
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
   }
 
-  function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!text.trim()) return
-    setTasks([...tasks, { id: Date.now(), text, weight, done: false }])
-    setText('')
-  }
+  function App({ session }: { session: PuzzleSession }) {
+    // where the puzzle lives (this browser or the server) is decided outside of App
+    const {
+      photo,
+      seed,
+      loading,
+      error,
+      saveError,
+      initialPositions,
+      earned,
+      startNew,
+      savePieces,
+    } = session
 
-  function removeTask(id: number) {
-    setTasks(tasks.filter((task) => task.id !== id))
-  }
-
-  function toggleTask(id: number) {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, done: !task.done } : task,
+    const [text, setText] = useState('')
+    const [tasks, setTasks] = useState<Task[]>([])
+    const [weight, setWeight] = useState(1)
+    const [piecesPerPoint, setPiecesPerPoint] = useState(2)
+    const [dailyCap, setDailyCap] = useState(20)
+    // the puzzle's size: it changes when you start a new puzzle, and the pieces change with it
+    const [grid, setGrid] = useState<PuzzleSize>({ rows: session.rows, cols: session.cols })
+    const [allPieces, setAllPieces] = useState<Piece[]>(() =>
+      placePieces(
+        createPieces({ ...demoPuzzle, rows: session.rows, cols: session.cols }),
+        initialPositions,
       ),
+    )
+    // the size picked for the NEXT puzzle (starts on the size you are playing now)
+    const [nextPieces, setNextPieces] = useState(
+      () => puzzleSizes.find((s) => s.rows === session.rows)?.pieces ?? puzzleSizes[0].pieces,
+    )
+    // guests only: pieces from earlier puzzles that were already placed (used up)
+    const [spent, setSpent] = useState(0)
+    const [drag, setDrag] = useState<DragState | null>(null)
+    // which batch of waiting pieces the tray is showing, and the pieces you just put back
+    const [trayOffset, setTrayOffset] = useState(0)
+    const [returned, setReturned] = useState<number[]>([])
+
+    const boardRef = useRef<HTMLDivElement>(null)
+    const trayRef = useRef<HTMLDivElement>(null)
+
+    // tell the session after every change, so it can save what moved
+    useEffect(() => {
+      savePieces(allPieces)
+    }, [allPieces, savePieces])
+
+    // until the photo arrives the pieces are plain colours
+    const shapeOnly: Puzzle = { ...demoPuzzle, rows: grid.rows, cols: grid.cols, seed }
+    const puzzle: Puzzle = {
+      ...shapeOnly,
+      imageUrl: photo ? sizedPhotoUrl(photo.imageUrl, shapeOnly) : '',
+    }
+
+    // the shapes and the earning order both come from the seed: a new seed, a new puzzle
+    const { rows, cols } = grid
+    const shape = useMemo(
+      () => generateShape({ ...demoPuzzle, rows, cols, seed }),
+      [rows, cols, seed],
+    )
+    const earnRank = useMemo(() => earnRanks(rows * cols, seed), [rows, cols, seed])
+
+    const completedWeight = tasks
+      .filter((task) => task.done)
+      .reduce((sum, task) => sum + task.weight, 0)
+
+    // A signed-in player's count comes from the server; a guest's from the tasks on this page.
+    // Either way it only counts pieces earned for THIS puzzle: pieces placed on earlier
+    // puzzles are used up.
+    const pieces = earned ?? Math.max(0, piecesEarned(completedWeight, piecesPerPoint, dailyCap) - spent)
+
+    // The tray shows at most as many pieces as the daily limit. The rest wait out of sight
+    // (the "+N" tile) and "Reload tray" brings the next batch in.
+    const trayLimit = Math.max(1, session.dailyCap ?? dailyCap)
+    const waiting = trayOrder(allPieces, pieces, earnRank, returned)
+    const trayPieces = trayWindow(waiting, trayOffset, trayLimit)
+    const hiddenCount = waiting.length - trayPieces.length
+
+    function reloadTray() {
+      setTrayOffset((offset) => (offset + trayLimit) % Math.max(1, waiting.length))
+    }
+
+    // A new puzzle: new photo, new shapes, the size you picked, and an empty board.
+    // Pieces already on the board are used up. Pieces you earned but had not placed yet
+    // come along, so they wait in the tray for the new puzzle.
+    async function newPuzzle() {
+      const size = puzzleSizes.find((s) => s.pieces === nextPieces) ?? puzzleSizes[0]
+      const placed = allPieces.filter((p) => p.position !== null).length
+      if (placed > 0) {
+        const carried = Math.max(0, pieces - placed)
+        const ok = window.confirm(
+          `Start a new puzzle? The ${placed} pieces on the board will be used up. ` +
+            `You keep your ${carried} unplaced pieces.`,
+        )
+        if (!ok) return
+      }
+
+      const started = await startNew({ rows: size.rows, cols: size.cols })
+      if (started) {
+        setGrid({ rows: size.rows, cols: size.cols })
+        setAllPieces(createPieces({ ...demoPuzzle, rows: size.rows, cols: size.cols }))
+        setTrayOffset(0)
+        setReturned([])
+        if (earned === null) setSpent((total) => total + placed)
+      }
+    }
+
+    function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
+      e.preventDefault()
+      if (!text.trim()) return
+      setTasks([...tasks, { id: Date.now(), text, weight, done: false }])
+      setText('')
+    }
+
+    function removeTask(id: number) {
+      setTasks(tasks.filter((task) => task.id !== id))
+    }
+
+    function toggleTask(id: number) {
+      setTasks(
+        tasks.map((task) =>
+          task.id === id ? { ...task, done: !task.done } : task,
+        ),
+      )
+    }
+
+    function movePiece(id: number, position: BoardPosition | null) {
+      setAllPieces((prev) => {
+        const piece = prev.find((p) => p.id === id)
+        if (!piece) return prev
+
+        // if it was dropped near a spot where it fits a neighbour, use that exact spot
+        const finalPosition =
+          position === null
+            ? null
+            : snapToNeighbors(piece, position, prev, puzzle)
+
+        const blocked =
+          finalPosition !== null &&
+          prev.some(
+            (p) =>
+              p.id !== id &&
+              p.position !== null &&
+              overlaps(p.position, finalPosition, puzzle),
+          )
+        if (blocked) return prev // too much overlap: leave everything as it was
+        return prev.map((p) => (p.id === id ? { ...p, position: finalPosition } : p))
+      })
+    }
+
+    // like movePiece, but for several locked pieces that travel together
+    function moveGroup(ids: number[], grabbedId: number, target: BoardPosition) {
+      setAllPieces((prev) => {
+        const members = prev.filter(
+          (p): p is Piece & { position: BoardPosition } =>
+            ids.includes(p.id) && p.position !== null,
+        )
+        const grabbed = members.find((p) => p.id === grabbedId)
+        if (!grabbed) return prev
+
+        // how far the whole group moves = how far the grabbed piece moved
+        let dx = target.x - grabbed.position.x
+        let dy = target.y - grabbed.position.y
+
+        // keep every member on the board
+        const xs = members.map((p) => p.position.x)
+        const ys = members.map((p) => p.position.y)
+        const fits = (mx: number, my: number) =>
+          Math.min(...xs) + mx >= -1e-9 &&
+          Math.max(...xs) + mx <= 1 - 1 / cols + 1e-9 &&
+          Math.min(...ys) + my >= -1e-9 &&
+          Math.max(...ys) + my <= 1 - 1 / rows + 1e-9
+
+        dx = clamp(dx, -Math.min(...xs), 1 - 1 / cols - Math.max(...xs))
+        dy = clamp(dy, -Math.min(...ys), 1 - 1 / rows - Math.max(...ys))
+
+        // snap the group onto pieces outside it: use the smallest correction any member wants
+        const others = prev.filter((p) => !ids.includes(p.id))
+        let fix = { x: 0, y: 0, size: Infinity }
+        for (const m of members) {
+          const wanted = { x: m.position.x + dx, y: m.position.y + dy }
+          const snapped = snapToNeighbors(m, wanted, others, puzzle)
+          const cx = snapped.x - wanted.x
+          const cy = snapped.y - wanted.y
+          const size = Math.hypot(cx * cols, cy * rows)
+          if (size > 1e-9 && size < fix.size) fix = { x: cx, y: cy, size }
+        }
+        if (fix.size < Infinity && fits(dx + fix.x, dy + fix.y)) {
+          dx += fix.x
+          dy += fix.y
+        }
+
+        // no member may overlap a piece that isn't part of the group
+        const blocked = members.some((m) =>
+          others.some(
+            (o) =>
+              o.position !== null &&
+              overlaps(
+                o.position,
+                { x: m.position.x + dx, y: m.position.y + dy },
+                puzzle,
+              ),
+          ),
+        )
+        if (blocked) return prev
+
+        return prev.map((p) =>
+          ids.includes(p.id) && p.position
+            ? { ...p, position: { x: p.position.x + dx, y: p.position.y + dy } }
+            : p,
+        )
+      })
+    }
+
+    function dropPiece(
+      id: number,
+      ids: number[],
+      x: number,
+      y: number,
+      gx: number,
+      gy: number,
+    ) {
+      const board = boardRef.current?.getBoundingClientRect()
+      const tray = trayRef.current?.getBoundingClientRect()
+
+      if (board && isInside(board, x, y)) {
+        const boxW = (1 + 2 * TAB_MARGIN) / cols
+        const boxH = (1 + 2 * TAB_MARGIN) / rows
+        // top-left of the piece's box, then step in by the tab margin to reach its base square
+        const px = (x - board.left) / board.width - gx * boxW + TAB_MARGIN / cols
+        const py = (y - board.top) / board.height - gy * boxH + TAB_MARGIN / rows
+        if (ids.length > 1) {
+          moveGroup(ids, id, { x: px, y: py })
+        } else {
+          movePiece(id, {
+            x: clamp(px, 0, 1 - 1 / cols),
+            y: clamp(py, 0, 1 - 1 / rows),
+          })
+        }
+      } else if (tray && isInside(tray, x, y) && ids.length === 1) {
+        movePiece(id, null) // groups can't go back to the tray
+        // a piece you take off the board should be visible in the tray, not hidden in the
+        // reserve. (Dropping a piece that was already in the tray changes nothing.)
+        if (allPieces.find((p) => p.id === id)?.position) {
+          setReturned((prev) => [id, ...prev.filter((other) => other !== id)])
+          setTrayOffset(0)
+        }
+      }
+      // dropped somewhere else: everything stays where it was
+    }
+
+    function startDrag(e: ReactPointerEvent<HTMLDivElement>, piece: Piece) {
+      e.preventDefault()
+      const rect = e.currentTarget.getBoundingClientRect()
+      const gx = (e.clientX - rect.left) / rect.width
+      const gy = (e.clientY - rect.top) / rect.height
+      const { width, height } = rect
+
+      // normally we carry just this piece; with shift held, everything locked to it comes too
+      let members: DragMember[] = [{ id: piece.id, dx: 0, dy: 0 }]
+      const board = boardRef.current?.getBoundingClientRect()
+      const start = piece.position
+      if (e.shiftKey && start && board) {
+        members = connectedGroup(piece.id, allPieces, puzzle).flatMap((m) =>
+          m.position
+            ? [
+                {
+                  id: m.id,
+                  dx: (m.position.x - start.x) * board.width,
+                  dy: (m.position.y - start.y) * board.height,
+                },
+              ]
+            : [],
+        )
+      }
+      const ids = members.map((m) => m.id)
+
+      const base = { id: piece.id, members, gx, gy, width, height }
+      setDrag({ ...base, x: e.clientX, y: e.clientY })
+
+      function onMove(ev: PointerEvent) {
+        setDrag({ ...base, x: ev.clientX, y: ev.clientY })
+      }
+      function stop() {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', stop)
+        setDrag(null)
+      }
+      function onUp(ev: PointerEvent) {
+        dropPiece(piece.id, ids, ev.clientX, ev.clientY, gx, gy)
+        stop()
+      }
+
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', stop)
+    }
+
+    return (
+      <main>
+        <h1>Habit Puzzle</h1>
+
+        {earned === null ? (
+          <>
+            <section>
+              <p>Completed weight today: {completedWeight}</p>
+              <p>
+                Pieces earned today: {pieces} / {dailyCap}
+              </p>
+
+              <label htmlFor="cap">Daily piece limit: </label>
+              <input
+                id="cap"
+                type="number"
+                min={0}
+                value={dailyCap}
+                onChange={(e) => setDailyCap(Number(e.target.value))}
+              />
+
+              <label htmlFor="rate"> Pieces per weight point: </label>
+              <input
+                id="rate"
+                type="number"
+                min={0}
+                value={piecesPerPoint}
+                onChange={(e) => setPiecesPerPoint(Number(e.target.value))}
+              />
+            </section>
+
+            <form onSubmit={handleSubmit}>
+              <label htmlFor="task">Task: </label>
+              <input
+                id="task"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="What do you need to do?"
+              />
+              <select
+                value={weight}
+                onChange={(e) => setWeight(Number(e.target.value))}
+              >
+                <option value={1}>1 - Light</option>
+                <option value={2}>2</option>
+                <option value={3}>3 - Medium</option>
+                <option value={4}>4</option>
+                <option value={5}>5 - Heavy</option>
+              </select>
+              <button type="submit">Add</button>
+            </form>
+
+            <div>
+              {tasks.map((task) => (
+                <div key={task.id}>
+                  <input
+                    type="checkbox"
+                    checked={task.done}
+                    onChange={() => toggleTask(task.id)}
+                  />
+                  <span>
+                    {task.text} (weight {task.weight})
+                  </span>
+                  <button onClick={() => removeTask(task.id)}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p>
+            <strong>{Math.min(pieces, rows * cols)}</strong> / {rows * cols} pieces acquired
+          </p>
+        )}
+
+        <div className="tray" ref={trayRef}>
+          {trayPieces.length === 0 && (
+            <span className="tray-empty">
+              Complete tasks to earn puzzle pieces
+            </span>
+          )}
+          {trayPieces.map((p) => (
+              <PieceView
+                key={p.id}
+                piece={p}
+                puzzle={puzzle}
+                shape={shape}
+                onPointerDown={startDrag}
+                style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
+              />
+            ))}
+          {hiddenCount > 0 && <span className="tray-more">+{hiddenCount}</span>}
+        </div>
+        {hiddenCount > 0 && (
+          <div className="tray-controls">
+            <button type="button" onClick={reloadTray}>
+              Reload tray
+            </button>
+          </div>
+        )}
+
+        <ImagePreview imageUrl={puzzle.imageUrl} />
+
+        <div>
+          <label htmlFor="size">Next puzzle: </label>
+          <select id="size" value={nextPieces} onChange={(e) => setNextPieces(Number(e.target.value))}>
+            {puzzleSizes.map((s) => (
+              <option key={s.pieces} value={s.pieces}>
+                {s.pieces} pieces
+              </option>
+            ))}
+          </select>{' '}
+          <button type="button" onClick={newPuzzle} disabled={loading}>
+            {loading ? 'Loading photo…' : 'New photo'}
+          </button>
+          {error && <span role="alert"> Could not load a photo: {error}</span>}
+          {saveError && <span role="alert"> {saveError}</span>}
+        </div>
+
+        <Board
+          puzzle={puzzle}
+          shape={shape}
+          pieces={allPieces}
+          boardRef={boardRef}
+          draggingIds={drag ? drag.members.map((m) => m.id) : []}
+          onPiecePointerDown={startDrag}
+        />
+
+        {drag &&
+          drag.members.map((m) => {
+            const piece = allPieces.find((p) => p.id === m.id)
+            if (!piece) return null
+            return (
+              <PieceView
+                ghost
+                key={m.id}
+                piece={piece}
+                puzzle={puzzle}
+                shape={shape}
+                style={{
+                  position: 'fixed',
+                  left: drag.x - drag.gx * drag.width + m.dx,
+                  top: drag.y - drag.gy * drag.height + m.dy,
+                  width: drag.width,
+                  height: drag.height,
+                  pointerEvents: 'none',
+                  zIndex: 1000,
+                }}
+              />
+            )
+          })}
+
+        {photo && (
+          <p className="credit">
+            Photo by{' '}
+            <a
+              href={`${photo.photographerUrl}?utm_source=habit_puzzle&utm_medium=referral`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {photo.photographer}
+            </a>{' '}
+            on{' '}
+            <a
+              href="https://unsplash.com/?utm_source=habit_puzzle&utm_medium=referral"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Unsplash
+            </a>
+          </p>
+        )}
+      </main>
     )
   }
 
-  function movePiece(id: number, position: BoardPosition | null) {
-    setAllPieces((prev) => {
-      const piece = prev.find((p) => p.id === id)
-      if (!piece) return prev
-
-      // if it was dropped near a spot where it fits a neighbour, use that exact spot
-      const finalPosition =
-        position === null
-          ? null
-          : snapToNeighbors(piece, position, prev, demoPuzzle)
-
-      const blocked =
-        finalPosition !== null &&
-        prev.some(
-          (p) =>
-            p.id !== id &&
-            p.position !== null &&
-            overlaps(p.position, finalPosition, demoPuzzle),
-        )
-      if (blocked) return prev // too much overlap: leave everything as it was
-      return prev.map((p) => (p.id === id ? { ...p, position: finalPosition } : p))
-    })
-  }
-
-  // like movePiece, but for several locked pieces that travel together
-  function moveGroup(ids: number[], grabbedId: number, target: BoardPosition) {
-    setAllPieces((prev) => {
-      const { rows, cols } = demoPuzzle
-      const members = prev.filter(
-        (p): p is Piece & { position: BoardPosition } =>
-          ids.includes(p.id) && p.position !== null,
-      )
-      const grabbed = members.find((p) => p.id === grabbedId)
-      if (!grabbed) return prev
-
-      // how far the whole group moves = how far the grabbed piece moved
-      let dx = target.x - grabbed.position.x
-      let dy = target.y - grabbed.position.y
-
-      // keep every member on the board
-      const xs = members.map((p) => p.position.x)
-      const ys = members.map((p) => p.position.y)
-      const fits = (mx: number, my: number) =>
-        Math.min(...xs) + mx >= -1e-9 &&
-        Math.max(...xs) + mx <= 1 - 1 / cols + 1e-9 &&
-        Math.min(...ys) + my >= -1e-9 &&
-        Math.max(...ys) + my <= 1 - 1 / rows + 1e-9
-
-      dx = clamp(dx, -Math.min(...xs), 1 - 1 / cols - Math.max(...xs))
-      dy = clamp(dy, -Math.min(...ys), 1 - 1 / rows - Math.max(...ys))
-
-      // snap the group onto pieces outside it: use the smallest correction any member wants
-      const others = prev.filter((p) => !ids.includes(p.id))
-      let fix = { x: 0, y: 0, size: Infinity }
-      for (const m of members) {
-        const wanted = { x: m.position.x + dx, y: m.position.y + dy }
-        const snapped = snapToNeighbors(m, wanted, others, demoPuzzle)
-        const cx = snapped.x - wanted.x
-        const cy = snapped.y - wanted.y
-        const size = Math.hypot(cx * cols, cy * rows)
-        if (size > 1e-9 && size < fix.size) fix = { x: cx, y: cy, size }
-      }
-      if (fix.size < Infinity && fits(dx + fix.x, dy + fix.y)) {
-        dx += fix.x
-        dy += fix.y
-      }
-
-      // no member may overlap a piece that isn't part of the group
-      const blocked = members.some((m) =>
-        others.some(
-          (o) =>
-            o.position !== null &&
-            overlaps(
-              o.position,
-              { x: m.position.x + dx, y: m.position.y + dy },
-              demoPuzzle,
-            ),
-        ),
-      )
-      if (blocked) return prev
-
-      return prev.map((p) =>
-        ids.includes(p.id) && p.position
-          ? { ...p, position: { x: p.position.x + dx, y: p.position.y + dy } }
-          : p,
-      )
-    })
-  }
-
-  function dropPiece(
-    id: number,
-    ids: number[],
-    x: number,
-    y: number,
-    gx: number,
-    gy: number,
-  ) {
-    const board = boardRef.current?.getBoundingClientRect()
-    const tray = trayRef.current?.getBoundingClientRect()
-
-    if (board && isInside(board, x, y)) {
-      const { rows, cols } = demoPuzzle
-      const boxW = (1 + 2 * TAB_MARGIN) / cols
-      const boxH = (1 + 2 * TAB_MARGIN) / rows
-      // top-left of the piece's box, then step in by the tab margin to reach its base square
-      const px = (x - board.left) / board.width - gx * boxW + TAB_MARGIN / cols
-      const py = (y - board.top) / board.height - gy * boxH + TAB_MARGIN / rows
-      if (ids.length > 1) {
-        moveGroup(ids, id, { x: px, y: py })
-      } else {
-        movePiece(id, {
-          x: clamp(px, 0, 1 - 1 / cols),
-          y: clamp(py, 0, 1 - 1 / rows),
-        })
-      }
-    } else if (tray && isInside(tray, x, y) && ids.length === 1) {
-      movePiece(id, null) // groups can't go back to the tray
-      // a piece you take off the board should be visible in the tray, not hidden in the
-      // reserve. (Dropping a piece that was already in the tray changes nothing.)
-      if (allPieces.find((p) => p.id === id)?.position) {
-        setReturned((prev) => [id, ...prev.filter((other) => other !== id)])
-        setTrayOffset(0)
-      }
-    }
-    // dropped somewhere else: everything stays where it was
-  }
-
-  function startDrag(e: ReactPointerEvent<HTMLDivElement>, piece: Piece) {
-    e.preventDefault()
-    const rect = e.currentTarget.getBoundingClientRect()
-    const gx = (e.clientX - rect.left) / rect.width
-    const gy = (e.clientY - rect.top) / rect.height
-    const { width, height } = rect
-
-    // normally we carry just this piece; with shift held, everything locked to it comes too
-    let members: DragMember[] = [{ id: piece.id, dx: 0, dy: 0 }]
-    const board = boardRef.current?.getBoundingClientRect()
-    const start = piece.position
-    if (e.shiftKey && start && board) {
-      members = connectedGroup(piece.id, allPieces, demoPuzzle).flatMap((m) =>
-        m.position
-          ? [
-              {
-                id: m.id,
-                dx: (m.position.x - start.x) * board.width,
-                dy: (m.position.y - start.y) * board.height,
-              },
-            ]
-          : [],
-      )
-    }
-    const ids = members.map((m) => m.id)
-
-    const base = { id: piece.id, members, gx, gy, width, height }
-    setDrag({ ...base, x: e.clientX, y: e.clientY })
-
-    function onMove(ev: PointerEvent) {
-      setDrag({ ...base, x: ev.clientX, y: ev.clientY })
-    }
-    function stop() {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      window.removeEventListener('pointercancel', stop)
-      setDrag(null)
-    }
-    function onUp(ev: PointerEvent) {
-      dropPiece(piece.id, ids, ev.clientX, ev.clientY, gx, gy)
-      stop()
-    }
-
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    window.addEventListener('pointercancel', stop)
-  }
-
-  return (
-    <main>
-      <h1>Habit Puzzle</h1>
-
-      {earnedTotal === null ? (
-        <>
-          <section>
-            <p>Completed weight today: {completedWeight}</p>
-            <p>
-              Pieces earned today: {pieces} / {dailyCap}
-            </p>
-
-            <label htmlFor="cap">Daily piece limit: </label>
-            <input
-              id="cap"
-              type="number"
-              min={0}
-              value={dailyCap}
-              onChange={(e) => setDailyCap(Number(e.target.value))}
-            />
-
-            <label htmlFor="rate"> Pieces per weight point: </label>
-            <input
-              id="rate"
-              type="number"
-              min={0}
-              value={piecesPerPoint}
-              onChange={(e) => setPiecesPerPoint(Number(e.target.value))}
-            />
-          </section>
-
-          <form onSubmit={handleSubmit}>
-            <label htmlFor="task">Task: </label>
-            <input
-              id="task"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="What do you need to do?"
-            />
-            <select
-              value={weight}
-              onChange={(e) => setWeight(Number(e.target.value))}
-            >
-              <option value={1}>1 - Light</option>
-              <option value={2}>2</option>
-              <option value={3}>3 - Medium</option>
-              <option value={4}>4</option>
-              <option value={5}>5 - Heavy</option>
-            </select>
-            <button type="submit">Add</button>
-          </form>
-
-          <div>
-            {tasks.map((task) => (
-              <div key={task.id}>
-                <input
-                  type="checkbox"
-                  checked={task.done}
-                  onChange={() => toggleTask(task.id)}
-                />
-                <span>
-                  {task.text} (weight {task.weight})
-                </span>
-                <button onClick={() => removeTask(task.id)}>Remove</button>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <p>
-          <strong>{Math.min(pieces, demoPuzzle.rows * demoPuzzle.cols)}</strong> / {demoPuzzle.rows * demoPuzzle.cols} pieces acquired
-        </p>
-      )}
-
-      <div className="tray" ref={trayRef}>
-        {trayPieces.length === 0 && (
-          <span className="tray-empty">
-            Complete tasks to earn puzzle pieces
-          </span>
-        )}
-        {trayPieces.map((p) => (
-            <PieceView
-              key={p.id}
-              piece={p}
-              puzzle={puzzle}
-              shape={shape}
-              onPointerDown={startDrag}
-              style={{ opacity: p.id === drag?.id ? 0.3 : 1 }}
-            />
-          ))}
-        {hiddenCount > 0 && <span className="tray-more">+{hiddenCount}</span>}
-      </div>
-      {hiddenCount > 0 && (
-        <div className="tray-controls">
-          <button type="button" onClick={reloadTray}>
-            Reload tray
-          </button>
-        </div>
-      )}
-
-      <ImagePreview imageUrl={puzzle.imageUrl} />
-
-      <div>
-        <button type="button" onClick={newPuzzle} disabled={loading}>
-          {loading ? 'Loading photo…' : 'New photo'}
-        </button>
-        {error && <span role="alert"> Could not load a photo: {error}</span>}
-        {saveError && <span role="alert"> {saveError}</span>}
-      </div>
-
-      <Board
-        puzzle={puzzle}
-        shape={shape}
-        pieces={allPieces}
-        boardRef={boardRef}
-        draggingIds={drag ? drag.members.map((m) => m.id) : []}
-        onPiecePointerDown={startDrag}
-      />
-
-      {drag &&
-        drag.members.map((m) => {
-          const piece = allPieces.find((p) => p.id === m.id)
-          if (!piece) return null
-          return (
-            <PieceView
-              ghost
-              key={m.id}
-              piece={piece}
-              puzzle={puzzle}
-              shape={shape}
-              style={{
-                position: 'fixed',
-                left: drag.x - drag.gx * drag.width + m.dx,
-                top: drag.y - drag.gy * drag.height + m.dy,
-                width: drag.width,
-                height: drag.height,
-                pointerEvents: 'none',
-                zIndex: 1000,
-              }}
-            />
-          )
-        })}
-
-      {photo && (
-        <p className="credit">
-          Photo by{' '}
-          <a
-            href={`${photo.photographerUrl}?utm_source=habit_puzzle&utm_medium=referral`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {photo.photographer}
-          </a>{' '}
-          on{' '}
-          <a
-            href="https://unsplash.com/?utm_source=habit_puzzle&utm_medium=referral"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Unsplash
-          </a>
-        </p>
-      )}
-    </main>
-  )
-}
-
-export default App
+  export default App

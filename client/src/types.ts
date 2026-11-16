@@ -13,6 +13,12 @@ export type Puzzle = {
   seed: number // decides the piece shapes: same seed, same shapes
 }
 
+// How many rows and columns of pieces a puzzle has
+export type PuzzleSize = { 
+  rows: number
+  cols: number 
+}
+
 export type BoardPosition = {
   x: number // 0 to 1, fraction of the board's width
   y: number // 0 to 1, fraction of the board's height

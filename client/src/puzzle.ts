@@ -1,4 +1,4 @@
-import type { Puzzle, Piece, BoardPosition } from './types'
+import type { Puzzle, Piece, BoardPosition, PuzzleSize } from './types'
 import { mulberry32 } from './shapes'
 
 export function piecesEarned(
@@ -18,6 +18,17 @@ export const demoPuzzle: Puzzle = {
   cols: 6,
   seed: 42,
 }
+
+// The puzzle sizes a player can pick. Every one is 3 columns for every 2 rows, the same
+// shape as the photos we ask Unsplash for, so nothing gets cropped oddly.
+export const puzzleSizes: (PuzzleSize & { pieces : number}) [] = [
+  { pieces: 24, rows: 4, cols: 6 },
+  { pieces: 96, rows: 8, cols: 12 },
+  { pieces: 150, rows: 10, cols: 15 },
+  { pieces: 294, rows: 14, cols: 21 },
+  { pieces: 486, rows: 18, cols: 27 },
+]
+
 
 export function createPieces(puzzle: Puzzle): Piece[] {
   const pieces: Piece[] = []
