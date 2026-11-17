@@ -188,3 +188,27 @@ export async function deleteTodo(id: number): Promise<Earned> {
   const res = await request(`/api/todos/${id}`, { method: 'DELETE' })
   return (await res.json()) as Earned
 }
+// ---- Streaks and history (signed-in players only) ----
+
+export type HabitStreak = {
+  id: number
+  name: string
+  best: number // the longest run of days in a row, ever
+  now: number // the run you are on right now (0 if it has broken)
+}
+
+export type DayStats = {
+  day: string // "2026-11-10"
+  pieces: number // pieces earned that day
+  habitsDone: number // habits ticked that day
+}
+
+export type Stats = {
+  streaks: HabitStreak[] // longest first
+  daily: DayStats[] // oldest first, one entry for every day (quiet days are zeros)
+}
+
+export async function loadStats(day: string, days = 30): Promise<Stats> {
+  const res = await request(`/api/stats?day=${day}&days=${days}`)
+  return (await res.json()) as Stats
+}

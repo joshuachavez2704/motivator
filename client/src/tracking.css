@@ -138,3 +138,72 @@
 .tracking-values input {
   width: 90px;
 }
+
+.tracking-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tracking-head h3 {
+  margin: 0;
+}
+
+.tracking-view {
+  font-size: 0.85em;
+  padding: 2px 10px;
+}
+
+.tracking-more {
+  margin: -4px 0 12px;
+  font-size: 0.85em;
+  color: var(--text);
+}
+
+/* streaks on the left, the two charts on the right */
+.tracking-stats {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 2fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .tracking-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tracking-stats .tracking-card {
+  margin-bottom: 16px;
+}
+
+.streak-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.streak-list li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.streak-list li:last-child {
+  border-bottom: none;
+}
+
+.streak-name {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.streak-numbers {
+  font-size: 0.9em;
+}

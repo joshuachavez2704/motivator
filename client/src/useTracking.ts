@@ -130,6 +130,7 @@ export function useTracking() {
     })
 
   return {
+    day,
     data,
     error,
     addHabit,

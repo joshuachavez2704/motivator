@@ -2,3 +2,23 @@
   color: #888;
   margin: auto;
 }
+
+/* under the board: the picture of the finished puzzle, and the controls for starting another */
+.puzzle-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  align-items: center;
+  justify-content: center;
+  max-width: 720px;
+  margin: 0 auto 1rem;
+}
+
+.puzzle-next {
+  text-align: left;
+}
+
+.credit {
+  font-size: 0.85em;
+  margin-bottom: 1.5rem;
+}

@@ -1,20 +1,13 @@
 .preview {
-  position: fixed;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 90px;
+  width: 160px;
   padding: 4px;
   border: 2px solid #888;
-  border-right: none;
-  border-radius: 8px 0 0 8px;
+  border-radius: 8px;
   background: #fff;
   color: #333;
   font: inherit;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   cursor: pointer;
-  z-index: 500; /* above the board, below the dragged piece (1000) */
-  transition: width 0.2s ease;
 }
 
 .preview img {
@@ -30,6 +23,22 @@
   margin-top: 4px;
 }
 
-.preview-open {
-  width: min(90vw, 560px);
+.preview-dialog {
+  max-width: min(92vw, 900px);
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.preview-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.preview-dialog img {
+  display: block;
+  width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
 }
