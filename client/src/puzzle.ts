@@ -222,14 +222,17 @@ export function placePieces(
 
 // Every earned piece that is not on the board, in the order the tray cycles through them:
 // pieces you just put back first (so they are right there), then the rest in the order
-// they were earned.
+// they were earned. A piece you just put back always counts as yours, even if un-ticking
+// a task has since lowered the number you have earned: it was already on the board.
 export function trayOrder(
   pieces: Piece[],
   earned: number,
   rank: number[],
   returned: number[],
 ): Piece[] {
-  const waiting = pieces.filter((p) => p.position === null && isEarned(p, earned, rank))
+  const waiting = pieces.filter(
+    (p) => p.position === null && (isEarned(p, earned, rank) || returned.includes(p.id)),
+  )
   const byId = new Map(waiting.map((p) => [p.id, p]))
   const first = returned.flatMap((id) => {
     const piece = byId.get(id)
@@ -238,6 +241,18 @@ export function trayOrder(
   const back = new Set(first.map((p) => p.id))
   const rest = waiting.filter((p) => !back.has(p.id)).sort((a, b) => rank[a.id] - rank[b.id])
   return [...first, ...rest]
+}
+
+// How many pieces are yours right now: every piece on the board (it stays yours even if you
+// later un-tick the task that earned it) plus every earned piece still waiting for a place.
+export function acquiredCount(
+  pieces: Piece[],
+  earned: number,
+  rank: number[],
+  returned: number[],
+): number {
+  const placed = pieces.filter((p) => p.position !== null).length
+  return placed + trayOrder(pieces, earned, rank, returned).length
 }
 
 // The part of the tray you can see: `limit` pieces starting at `offset`, wrapping around
