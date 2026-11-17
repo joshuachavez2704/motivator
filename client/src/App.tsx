@@ -443,24 +443,6 @@
           </div>
         )}
 
-        <ImagePreview imageUrl={puzzle.imageUrl} />
-
-        <div>
-          <label htmlFor="size">Next puzzle: </label>
-          <select id="size" value={nextPieces} onChange={(e) => setNextPieces(Number(e.target.value))}>
-            {puzzleSizes.map((s) => (
-              <option key={s.pieces} value={s.pieces}>
-                {s.pieces} pieces
-              </option>
-            ))}
-          </select>{' '}
-          <button type="button" onClick={newPuzzle} disabled={loading}>
-            {loading ? 'Loading photo…' : 'New photo'}
-          </button>
-          {error && <span role="alert"> Could not load a photo: {error}</span>}
-          {saveError && <span role="alert"> {saveError}</span>}
-        </div>
-
         <Board
           puzzle={puzzle}
           shape={shape}
@@ -469,6 +451,25 @@
           draggingIds={drag ? drag.members.map((m) => m.id) : []}
           onPiecePointerDown={startDrag}
         />
+
+        <div className="puzzle-footer">
+          <ImagePreview imageUrl={puzzle.imageUrl} />
+          <div className="puzzle-next">
+            <label htmlFor="size">Next puzzle: </label>
+            <select id="size" value={nextPieces} onChange={(e) => setNextPieces(Number(e.target.value))}>
+              {puzzleSizes.map((s) => (
+                <option key={s.pieces} value={s.pieces}>
+                  {s.pieces} pieces
+                </option>
+              ))}
+            </select>{' '}
+            <button type="button" onClick={newPuzzle} disabled={loading}>
+              {loading ? 'Loading photo…' : 'New photo'}
+            </button>
+            {error && <p role="alert">Could not load a photo: {error}</p>}
+            {saveError && <p role="alert">{saveError}</p>}
+          </div>
+        </div>
 
         {drag &&
           drag.members.map((m) => {
