@@ -142,6 +142,62 @@ trackingRouter.get('/tracking', requireUser, handle(async (req, res) => {
   res.json({ settings: settings.rows[0], habits: habits.rows, todos: todos.rows, ...earned })
 }))
 
+
+// Streaks and the last few weeks, for the charts on the habits screen.
+// `day` is the player's today; `days` is how far back the charts go (default 30).
+trackingRouter.get('/stats', requireUser, handle(async (req, res) => {
+  const day = req.query.day
+  const daysParam = req.query.days === undefined ? 30 : Number(req.query.days)
+  if (!isAllowedDay(day) || !isIntInRange(daysParam, 7, 90)) {
+    res.status(400).json({ error: 'day must be a date like 2026-11-10 (today), and days a whole number from 7 to 90' })
+    return
+  }
+  const userId = res.locals.userId as string
+
+  const [streaks, daily] = await Promise.all([
+    // A streak is a run of consecutive days with a tick. Numbering each habit's ticked days
+    // 1, 2, 3... and subtracting that from the date gives every day in a run the same
+    // value, so grouping by it finds the runs. "now" counts a run that reaches today or
+    // yesterday (today is still open, so yesterday's run is not broken yet).
+    pool.query(
+      `WITH ticks AS (
+         SELECT c.habit_id, c.day,
+                c.day - (row_number() OVER (PARTITION BY c.habit_id ORDER BY c.day))::int AS run
+           FROM habit_checks c
+           JOIN habits h ON h.id = c.habit_id
+          WHERE h.user_id = $1 AND h.archived_at IS NULL AND c.day <= $2::date
+       ), runs AS (
+         SELECT habit_id, count(*)::int AS length, max(day) AS last_day
+           FROM ticks GROUP BY habit_id, run
+       )
+       SELECT h.id, h.name,
+              coalesce(max(r.length), 0)::int AS best,
+              coalesce(max(r.length) FILTER (WHERE r.last_day >= $2::date - 1), 0)::int AS now
+         FROM habits h
+         LEFT JOIN runs r ON r.habit_id = h.id
+        WHERE h.user_id = $1 AND h.archived_at IS NULL
+        GROUP BY h.id, h.name
+        ORDER BY best DESC, now DESC, h.id`,
+      [userId, day],
+    ),
+    // one row per day, including days with nothing (zeros), oldest first
+    pool.query(
+      `SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
+              coalesce(e.pieces, 0)::int AS pieces,
+              (SELECT count(*) FROM habit_checks c
+                 JOIN habits h ON h.id = c.habit_id
+                WHERE h.user_id = $1 AND c.day = d.day)::int AS "habitsDone"
+         FROM (SELECT g::date AS day
+                 FROM generate_series($2::date - ($3::int - 1), $2::date, interval '1 day') AS g) d
+         LEFT JOIN daily_earnings e ON e.user_id = $1 AND e.day = d.day
+        ORDER BY d.day`,
+      [userId, day, daysParam],
+    ),
+  ])
+
+  res.json({ streaks: streaks.rows, daily: daily.rows })
+}))
+
 // Change how many pieces things are worth, and the daily limit.
 trackingRouter.put('/settings', requireUser, handle(async (req, res) => {
   const { habitPieces, todoPieces, focusPieces, dailyCap } = (req.body ?? {}) as Record<string, unknown>
