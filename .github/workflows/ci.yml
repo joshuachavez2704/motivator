@@ -22,22 +22,80 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
-      - run: npm run build   # the template's build also runs the TypeScript check
+      - run: npm run build # the template's build also runs the TypeScript check
       - run: npm test
-      
-  server: 
+
+  server:
     runs-on: ubuntu-latest
-    defaults: 
-      run: 
+    defaults:
+      run:
         working-directory: server
-    steps: 
-        - uses: actions/checkout@v4
 
-        - uses: actions/setup-node@v4
-          with: 
-            node-version: 22
-            cache: npm
-            cache-dependency-path: server/package-lock.json
+    # a throwaway Postgres, started fresh for every run (same version as docker-compose.yml)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: motivator
+          POSTGRES_PASSWORD: motivator
+          POSTGRES_DB: motivator
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U motivator"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
-        - run: npm ci
-        - run: npm run build
+    env:
+      DATABASE_URL: postgres://motivator:motivator@localhost:5432/motivator
+      UNSPLASH_ACCESS_KEY: ci-placeholder # the smoke tests never call Unsplash
+      PORT: 3001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Apply every migration to an empty database
+        run: npm run migrate:prod
+
+      - name: Running the migrations again changes nothing
+        run: |
+          output=$(npm run migrate:prod 2>&1)
+          echo "$output"
+          echo "$output" | grep -q "up to date"
+
+      - name: Start the server
+        run: |
+          nohup node dist/index.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/api/health/db; then
+              echo
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "The server did not start"
+          cat server.log
+          exit 1
+
+      - name: Smoke test accounts, sessions, puzzles and pieces
+        run: bash smoke/core.sh
+
+      - name: Smoke test habits, to-dos and piece values
+        run: bash smoke/tracking.sh
+
+      - name: Smoke test starting new puzzles
+        run: bash smoke/carryover.sh
+
+      - name: Show the server log (only when something failed)
+        if: failure()
+        run: cat server.log
