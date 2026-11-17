@@ -13,6 +13,7 @@ import {
   placePieces,
   puzzleSizes,
   trayOrder,
+  acquiredCount,
   trayWindow,
   demoPuzzle,
 } from './puzzle'
@@ -256,10 +257,21 @@ describe('trayOrder', () => {
     expect(order).toHaveLength(5)
   })
 
-  it('ignores a "put back" piece that is not earned or is on the board', () => {
+  it('keeps a put-back piece even when it is no longer counted as earned', () => {
+    // it was on the board, so it is yours; un-ticking a task must not make it disappear
     const pieces = createPieces(demoPuzzle)
-    const unearned = pieces.find((p) => rank[p.id] === 20)!
-    expect(trayOrder(pieces, 5, rank, [unearned.id])).toHaveLength(5)
+    const lowRankOutsideEarned = pieces.find((p) => rank[p.id] === 20)!
+    const order = trayOrder(pieces, 5, rank, [lowRankOutsideEarned.id])
+    expect(order).toHaveLength(6)
+    expect(order[0].id).toBe(lowRankOutsideEarned.id)
+  })
+
+  it('does not list a put-back piece that is on the board again', () => {
+    const piece = createPieces(demoPuzzle).find((p) => rank[p.id] === 1)!
+    const pieces = withPositions({ [piece.id]: { x: 0.2, y: 0.2 } })
+    const order = trayOrder(pieces, 5, rank, [piece.id])
+    expect(order.map((p) => p.id)).not.toContain(piece.id)
+    expect(order).toHaveLength(4)
   })
 })
 
@@ -305,5 +317,38 @@ describe('puzzleSizes', () => {
 
   it('offers the 24-piece puzzle the app starts with', () => {
     expect(puzzleSizes.some((s) => s.rows === demoPuzzle.rows && s.cols === demoPuzzle.cols)).toBe(true)
+  })
+})
+
+describe('acquiredCount', () => {
+  const rank = earnRanks(24, 11)
+  const idWithRank = (r: number) => createPieces(demoPuzzle).find((p) => rank[p.id] === r)!.id
+  // the pieces that were earned first, placed on the board
+  const placedFirst = (n: number) =>
+    withPositions(Object.fromEntries(Array.from({ length: n }, (_, r) => [idWithRank(r), { x: 0.1, y: 0.1 }])))
+
+  it('counts placed pieces plus the ones waiting in the tray', () => {
+    expect(acquiredCount(createPieces(demoPuzzle), 5, rank, [])).toBe(5)
+    expect(acquiredCount(placedFirst(2), 5, rank, [])).toBe(5)
+    expect(acquiredCount(placedFirst(5), 5, rank, [])).toBe(5)
+  })
+
+  it('keeps placed pieces when you un-tick tasks afterwards', () => {
+    // 5 earned and all 5 placed, then 3 tasks are un-ticked: earned is now 2
+    expect(acquiredCount(placedFirst(5), 2, rank, [])).toBe(5)
+    expect(acquiredCount(placedFirst(5), 0, rank, [])).toBe(5)
+  })
+
+  it('still lowers the count for pieces that were never placed', () => {
+    expect(acquiredCount(placedFirst(2), 2, rank, [])).toBe(2)
+    expect(acquiredCount(createPieces(demoPuzzle), 2, rank, [])).toBe(2)
+  })
+
+  it('counts a piece you pulled back off the board after un-ticking', () => {
+    // 5 placed, earned drops to 2, then the piece with rank 4 goes back to the tray
+    const pieces = placedFirst(5).map((p) => (rank[p.id] === 4 ? { ...p, position: null } : p))
+    expect(acquiredCount(pieces, 2, rank, [])).toBe(4) // after a reload, it is no longer remembered
+    expect(acquiredCount(pieces, 2, rank, [idWithRank(4)])).toBe(5)
+    expect(trayOrder(pieces, 2, rank, [idWithRank(4)]).map((p) => p.id)).toEqual([idWithRank(4)])
   })
 })

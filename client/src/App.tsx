@@ -13,6 +13,7 @@
     placePieces,
     puzzleSizes,
     trayOrder,
+    acquiredCount,
     trayWindow,
     demoPuzzle,
   } from './puzzle'
@@ -119,6 +120,8 @@
     // (the "+N" tile) and "Reload tray" brings the next batch in.
     const trayLimit = Math.max(1, session.dailyCap ?? dailyCap)
     const waiting = trayOrder(allPieces, pieces, earnRank, returned)
+    // pieces already placed stay yours even if you un-tick the task that earned them
+    const acquired = acquiredCount(allPieces, pieces, earnRank, returned)
     const trayPieces = trayWindow(waiting, trayOffset, trayLimit)
     const hiddenCount = waiting.length - trayPieces.length
 
@@ -413,7 +416,7 @@
           </>
         ) : (
           <p>
-            <strong>{Math.min(pieces, rows * cols)}</strong> / {rows * cols} pieces acquired
+            <strong>{acquired}</strong> / {rows * cols} pieces acquired
           </p>
         )}
 
