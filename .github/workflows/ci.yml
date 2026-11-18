@@ -96,6 +96,12 @@ jobs:
       - name: Smoke test starting new puzzles
         run: bash smoke/carryover.sh
 
+      - name: Smoke test streaks and daily history
+        run: bash smoke/stats.sh
+
+      - name: Smoke test rolling over yesterday's tasks
+        run: bash smoke/rollover.sh
+
       - name: Show the server log (only when something failed)
         if: failure()
         run: cat server.log
