@@ -19,6 +19,7 @@ export function useTracking() {
   const [day, setDay] = useState(() => localDay())
   const [data, setData] = useState<TrackingData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [rolling, setRolling] = useState(false) // true while a roll-over is being sent
 
   // load today's data (and load again if the day changes)
   useEffect(() => {
@@ -123,6 +124,23 @@ export function useTracking() {
       setData((prev) => prev && { ...prev, ...earned, todos: prev.todos.filter((t) => t.id !== id) })
     })
 
+  // Yesterday's unfinished tasks: accepted ones join today's list, dismissed ones just go away.
+  // Whatever the server did not change (another tab got there first) is dropped from the offer too.
+  const rollOver = async (action: 'accept' | 'dismiss', ids: number[]) => {
+    setRolling(true)
+    await run(async () => {
+      const result = await api.rolloverTodos(day, action, ids)
+      setData((prev) => {
+        if (!prev) return prev
+        const todos = [...prev.todos, ...result.todos].sort(
+          (a, b) => Number(b.focus) - Number(a.focus) || a.id - b.id,
+        )
+        return { ...prev, todos, carryover: prev.carryover.filter((t) => !ids.includes(t.id)) }
+      })
+    })
+    setRolling(false)
+  }
+
   const saveSettings = (values: PieceValues) =>
     run(async () => {
       const settings = await api.saveSettings(values)
@@ -139,6 +157,8 @@ export function useTracking() {
     addTodo,
     changeTodo,
     removeTodo,
+    rollOver,
+    rolling,
     saveSettings,
   }
 }

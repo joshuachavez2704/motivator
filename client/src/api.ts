@@ -132,10 +132,14 @@ export type PieceValues = {
 export type Habit = { id: number; name: string; done: boolean }
 export type Todo = { id: number; text: string; done: boolean; focus: boolean }
 
+// A task from yesterday that was never finished, offered to roll over to today
+export type CarryoverTodo = { id: number; text: string }
+
 export type TrackingData = {
   settings: PieceValues
   habits: Habit[]
   todos: Todo[]
+  carryover: CarryoverTodo[]
   earnedOnDay: number // pieces earned on the day you asked for
   earnedTotal: number // pieces earned on every day so far
 }
@@ -146,7 +150,23 @@ export type Earned = { earnedOnDay: number; earnedTotal: number }
 // day looks like "2026-11-10": the player's own local date
 export async function loadTracking(day: string): Promise<TrackingData> {
   const res = await request(`/api/tracking?day=${day}`)
-  return (await res.json()) as TrackingData
+  const data = (await res.json()) as TrackingData
+  // an older server (mid-deploy) does not send this yet
+  return { ...data, carryover: data.carryover ?? [] }
+}
+
+// Move yesterday's unfinished tasks to today ("accept"), or stop offering them ("dismiss").
+// The answer lists the ids that were changed, and for "accept" the moved tasks.
+export async function rolloverTodos(
+  day: string,
+  action: 'accept' | 'dismiss',
+  ids: number[],
+): Promise<{ ids: number[]; todos: Todo[] }> {
+  const res = await request('/api/todos/rollover', {
+    method: 'POST',
+    body: JSON.stringify({ day, action, ids }),
+  })
+  return (await res.json()) as { ids: number[]; todos: Todo[] }
 }
 
 export async function saveSettings(values: PieceValues): Promise<PieceValues> {
