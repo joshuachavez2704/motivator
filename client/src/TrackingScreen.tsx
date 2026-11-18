@@ -265,7 +265,7 @@ export default function TrackingScreen({ tracking }: { tracking: Tracking }) {
       <h2>Today</h2>
       <p className="tracking-earned">
         <strong>{data.earnedOnDay}</strong> pieces earned today (limit {settings.dailyCap}) ·{' '}
-        <strong>{data.earnedTotal}</strong> in total
+        <strong>{data.earnedTotal}</strong> earned all time
       </p>
       {error && (
         <p role="alert" className="tracking-error">
