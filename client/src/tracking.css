@@ -277,3 +277,84 @@
 body:has(dialog.modal[open]) {
   overflow: hidden;
 }
+
+
+/* "Yesterday's tasks were left unfinished. Roll them over to today?" */
+.rollover {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--accent-bg);
+}
+
+.rollover-question {
+  margin: 0 0 8px;
+  font-size: 0.9em;
+  color: var(--text-h);
+}
+
+/* a long list scrolls inside the box instead of pushing the To-Do list far down */
+.rollover-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 9.5rem;
+  overflow-y: auto;
+}
+
+.rollover-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.rollover-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rollover-yes,
+.rollover-no {
+  flex: none;
+  width: 2em;
+  padding: 2px 0;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.rollover-yes,
+.rollover-no {
+  font-weight: 700;
+}
+
+.rollover-yes {
+  color: #15803d;
+}
+
+.rollover-no {
+  color: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rollover-yes {
+    color: #4ade80;
+  }
+
+  .rollover-no {
+    color: #f87171;
+  }
+}
+
+.rollover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rollover-actions button {
+  font-size: 0.85em;
+  padding: 2px 10px;
+}

@@ -5,6 +5,7 @@ import type { PieceValues, HabitStreak } from './api'
 import { useStats } from './useStats'
 import { dayCount } from './chart'
 import TrendChart from './TrendChart'
+import RolloverPrompt from './RolloverPrompt'
 import type { Tracking } from './useTracking'
 import './tracking.css'
 
@@ -204,6 +205,16 @@ export default function TrackingScreen({ tracking }: { tracking: Tracking }) {
   const version = `${data.earnedOnDay}:${habits.map((h) => (h.done ? 1 : 0)).join('')}:${habits.length}`
   const close = () => setPanel(null)
 
+  // yesterday's unfinished tasks, shown at the top of the To-Do box (and its window)
+  const rolloverPrompt = (
+    <RolloverPrompt
+      tasks={data.carryover}
+      busy={tracking.rolling}
+      onAccept={(ids) => tracking.rollOver('accept', ids)}
+      onReject={(ids) => tracking.rollOver('dismiss', ids)}
+    />
+  )
+
   // the rows of each list, used by the small box (first few) and by the window (all of them)
   const habitList = (rows: typeof habits) => (
     <ul>
@@ -274,6 +285,7 @@ export default function TrackingScreen({ tracking }: { tracking: Tracking }) {
 
         <div className="tracking-card">
           <CardHeader title="To-Do" count={todos.length} onOpen={() => setPanel('todos')} />
+          {rolloverPrompt}
           {todoList(todos.slice(0, SMALL.todos))}
           {todos.length > SMALL.todos && (
             <p className="tracking-more">+{todos.length - SMALL.todos} more. Press View to see them all.</p>
@@ -298,6 +310,7 @@ export default function TrackingScreen({ tracking }: { tracking: Tracking }) {
       )}
       {panel === 'todos' && (
         <Modal title="To-Do" onClose={close}>
+          {rolloverPrompt}
           {todoList(todos)}
           <AddForm label="New to-do" placeholder="Something for today" onAdd={tracking.addTodo} />
         </Modal>
