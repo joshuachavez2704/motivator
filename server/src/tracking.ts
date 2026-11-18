@@ -115,7 +115,7 @@ trackingRouter.get('/tracking', requireUser, handle(async (req, res) => {
   const userId = res.locals.userId as string
   await ensureSettings(pool, userId)
 
-  const [settings, habits, todos, earned] = await Promise.all([
+  const [settings, habits, todos, carryover, earned] = await Promise.all([
     pool.query(
       `SELECT habit_pieces AS "habitPieces", todo_pieces AS "todoPieces",
               focus_pieces AS "focusPieces", daily_cap AS "dailyCap"
@@ -136,10 +136,24 @@ trackingRouter.get('/tracking', requireUser, handle(async (req, res) => {
         ORDER BY is_focus DESC, id`,
       [userId, day],
     ),
+    // yesterday's tasks that were never finished and have not been turned down yet
+    pool.query(
+      `SELECT id, text
+         FROM todos
+        WHERE user_id = $1 AND day = $2::date - 1 AND NOT done AND dismissed_at IS NULL
+        ORDER BY is_focus DESC, id`,
+      [userId, day],
+    ),
     earnedSummary(pool, userId, day),
   ])
 
-  res.json({ settings: settings.rows[0], habits: habits.rows, todos: todos.rows, ...earned })
+  res.json({
+    settings: settings.rows[0],
+    habits: habits.rows,
+    todos: todos.rows,
+    carryover: carryover.rows,
+    ...earned,
+  })
 }))
 
 
@@ -297,6 +311,51 @@ trackingRouter.post('/todos', requireUser, handle(async (req, res) => {
     [res.locals.userId, day, text.trim()],
   )
   res.status(201).json(rows[0])
+}))
+
+// Yesterday's unfinished tasks: move them to today ("accept") or stop offering them ("dismiss").
+// `day` is today; only tasks dated the day before it, not done and not already dismissed, can
+// be touched, and only your own. Anything that does not qualify is skipped, so sending the same
+// request twice (two tabs, a double click) is harmless. The answer lists the ids that were
+// changed, and for "accept" the moved tasks as they are now.
+trackingRouter.post('/todos/rollover', requireUser, handle(async (req, res) => {
+  const { day, action, ids } = (req.body ?? {}) as Record<string, unknown>
+  if (
+    !isAllowedDay(day) ||
+    (action !== 'accept' && action !== 'dismiss') ||
+    !Array.isArray(ids) ||
+    ids.length < 1 ||
+    ids.length > 200 ||
+    !ids.every((id) => isIntInRange(id, 1, 2147483647))
+  ) {
+    res.status(400).json({ error: 'Send day (today), action ("accept" or "dismiss") and 1 to 200 to-do ids' })
+    return
+  }
+  const userId = res.locals.userId as string
+
+  if (action === 'accept') {
+    // "your one thing" does not carry over: today's star stays where the player put it
+    const { rows } = await pool.query(
+      `UPDATE todos
+          SET day = $2::date, is_focus = false
+        WHERE user_id = $1 AND id = ANY($3::int[])
+          AND day = $2::date - 1 AND NOT done AND dismissed_at IS NULL
+        RETURNING id, text, done, is_focus AS focus`,
+      [userId, day, ids],
+    )
+    res.json({ ids: rows.map((r) => r.id), todos: rows })
+    return
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE todos
+        SET dismissed_at = now()
+      WHERE user_id = $1 AND id = ANY($3::int[])
+        AND day = $2::date - 1 AND NOT done AND dismissed_at IS NULL
+      RETURNING id`,
+    [userId, day, ids],
+  )
+  res.json({ ids: rows.map((r) => r.id), todos: [] })
 }))
 
 // Change a to-do: tick it, rename it, or make it "your one thing" for the day.
